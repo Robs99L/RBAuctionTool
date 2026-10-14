@@ -16,7 +16,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 
 ## Local setup
 
-Requirements: Node.js 20+ and npm. Supabase is optional for the local demo.
+Requirements: Node.js 22+ and npm. Supabase is optional for the local demo.
 
 ```bash
 npm install
@@ -94,7 +94,7 @@ The unit tests cover currency parsing and minimum-bid calculation. The authorita
 
 ## Netlify deployment
 
-The repository includes [`netlify.toml`](netlify.toml) with `npm run build` and Node.js 20. Modern Netlify projects detect Next.js and install the supported Next.js runtime automatically.
+The repository includes [`netlify.toml`](netlify.toml) with `npm run build`, Node.js 22, and the official Netlify Next.js runtime.
 
 In **Netlify → Site configuration → Environment variables**, configure all four variables above for the Production context (and Deploy Previews if needed). Trigger a new deploy after changing environment variables. The application uses the hosted Supabase project in production and has no dependency on a local server or local database.
 
