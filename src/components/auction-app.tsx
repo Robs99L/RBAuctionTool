@@ -7,7 +7,9 @@ import { selectCurrentAuction } from "@/lib/auction-queue";
 import { minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
 import { formatMoney, formatTime } from "@/lib/format";
 import {
+  ensureAnonymousSupabaseSession,
   getSupabaseBrowserClient,
+  getVerifiedSupabaseSession,
   hasSupabaseBrowserConfig,
 } from "@/lib/supabase-browser";
 import {
@@ -111,17 +113,7 @@ export function AuctionApp() {
 
   const joinAuction = useCallback(async (username: string) => {
     if (!client || !auctionId) throw new Error("The auction is not available.");
-    const { data: sessionData } = await client.auth.getSession();
-    if (!sessionData.session) {
-      const { error: authError } = await client.auth.signInAnonymously();
-      if (authError) {
-        throw new Error(
-          authError.message.includes("Anonymous sign-ins are disabled")
-            ? "Anonymous sign-ins are disabled. Enable them in Supabase Authentication settings."
-            : authError.message,
-        );
-      }
-    }
+    await ensureAnonymousSupabaseSession(client);
     const { data, error: joinError } = await client.rpc("join_auction", {
       p_auction_id: auctionId,
       p_username: username,
@@ -191,12 +183,23 @@ export function AuctionApp() {
       setParticipant(null);
       setBids([]);
       setParticipantCount(0);
-      const { data: sessionData } = await client!.auth.getSession();
-      if (!sessionData.session || !active) return;
-      const { data } = await client!.rpc("get_my_participant", {
-        p_auction_id: auctionId,
-      });
-      if (active) setParticipant(data?.[0] ? data[0] as Participant : null);
+      try {
+        const session = await getVerifiedSupabaseSession(client!);
+        if (!session || !active) return;
+        const { data, error: restoreError } = await client!.rpc("get_my_participant", {
+          p_auction_id: auctionId,
+        });
+        if (restoreError) throw restoreError;
+        if (active) setParticipant(data?.[0] ? data[0] as Participant : null);
+      } catch (restoreError) {
+        if (active) {
+          setError(
+            restoreError instanceof Error
+              ? restoreError.message
+              : "Could not restore the participant session.",
+          );
+        }
+      }
     }
 
     void restoreParticipant();
