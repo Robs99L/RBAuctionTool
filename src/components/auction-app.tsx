@@ -3,12 +3,23 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { selectCurrentAuction } from "@/lib/auction-queue";
 import { minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
 import { formatMoney, formatTime } from "@/lib/format";
 import {
   getSupabaseBrowserClient,
   hasSupabaseBrowserConfig,
 } from "@/lib/supabase-browser";
+import {
+  clearDemoParticipantId,
+  createDemoAuctionState,
+  DEMO_STATE_KEY,
+  loadDemoAuctionState,
+  loadDemoParticipantId,
+  saveDemoAuctionState,
+  saveDemoParticipantId,
+  type DemoAuctionState,
+} from "@/lib/demo-auction";
 import type { Auction, AuctionStatus, Bid, Participant } from "@/lib/types";
 
 type ConnectionState = "connecting" | "live" | "offline";
@@ -18,6 +29,7 @@ function normalizeAuction(value: Record<string, unknown>): Auction {
     ...(value as unknown as Auction),
     starting_price: Number(value.starting_price),
     minimum_increment: Number(value.minimum_increment),
+    sort_order: Number(value.sort_order),
   };
 }
 
@@ -39,18 +51,30 @@ function effectiveStatus(auction: Auction): AuctionStatus {
 
 export function AuctionApp() {
   const configured = hasSupabaseBrowserConfig();
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true" || !configured;
   const client = useMemo(
-    () => (configured ? getSupabaseBrowserClient() : null),
-    [configured],
+    () => (configured && !demoMode ? getSupabaseBrowserClient() : null),
+    [configured, demoMode],
   );
   const [auction, setAuction] = useState<Auction | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
   const [participantCount, setParticipantCount] = useState(0);
-  const [loading, setLoading] = useState(configured);
+  const [loading, setLoading] = useState(configured && !demoMode);
   const [error, setError] = useState("");
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const auctionId = auction?.id;
+
+  const loadCurrentAuction = useCallback(async () => {
+    if (!client) return;
+    const { data, error: loadError } = await client
+      .from("auctions")
+      .select("*")
+      .order("sort_order", { ascending: true });
+    if (loadError) throw loadError;
+    const auctions = (data ?? []).map((row) => normalizeAuction(row));
+    setAuction(selectCurrentAuction(auctions));
+  }, [client]);
 
   const refreshDashboard = useCallback(async () => {
     if (!client || !auctionId) return;
@@ -85,45 +109,94 @@ export function AuctionApp() {
     setAuction(normalizeAuction(auctionResult.data));
   }, [auctionId, client]);
 
+  const joinAuction = useCallback(async (username: string) => {
+    if (!client || !auctionId) throw new Error("The auction is not available.");
+    const { data: sessionData } = await client.auth.getSession();
+    if (!sessionData.session) {
+      const { error: authError } = await client.auth.signInAnonymously();
+      if (authError) {
+        throw new Error(
+          authError.message.includes("Anonymous sign-ins are disabled")
+            ? "Anonymous sign-ins are disabled. Enable them in Supabase Authentication settings."
+            : authError.message,
+        );
+      }
+    }
+    const { data, error: joinError } = await client.rpc("join_auction", {
+      p_auction_id: auctionId,
+      p_username: username,
+    });
+    if (joinError) throw joinError;
+    if (!data?.[0]) throw new Error("The auction could not be joined.");
+    return data[0] as Participant;
+  }, [auctionId, client]);
+
+  const placeBid = useCallback(async (amount: number) => {
+    if (!client || !auctionId) throw new Error("The auction is not available.");
+    const { data, error: bidError } = await client.rpc("place_bid", {
+      p_auction_id: auctionId,
+      p_amount: amount,
+    });
+    if (bidError) throw bidError;
+    return Number(data?.[0]?.amount ?? amount);
+  }, [auctionId, client]);
+
   useEffect(() => {
     if (!client) return;
     let active = true;
 
     async function load() {
       setLoading(true);
-      const { data, error: loadError } = await client!
-        .from("auctions")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!active) return;
-      if (loadError) {
-        setError(loadError.message);
-      } else if (data) {
-        setAuction(normalizeAuction(data));
+      try {
+        await loadCurrentAuction();
+        if (active) setError("");
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : "Could not load the auction queue.");
+        }
       }
-      setLoading(false);
+      if (active) setLoading(false);
     }
 
     void load();
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, loadCurrentAuction]);
+
+  useEffect(() => {
+    if (!client) return;
+    const refreshQueue = () => {
+      void loadCurrentAuction().catch(() => setConnection("offline"));
+    };
+    const channel = client
+      .channel("auction-queue")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "auctions" },
+        refreshQueue,
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [client, loadCurrentAuction]);
 
   useEffect(() => {
     if (!client || !auctionId) return;
     let active = true;
 
     async function restoreParticipant() {
+      setParticipant(null);
+      setBids([]);
+      setParticipantCount(0);
       const { data: sessionData } = await client!.auth.getSession();
       if (!sessionData.session || !active) return;
       const { data } = await client!.rpc("get_my_participant", {
         p_auction_id: auctionId,
       });
-      if (active && data?.[0]) setParticipant(data[0] as Participant);
+      if (active) setParticipant(data?.[0] ? data[0] as Participant : null);
     }
 
     void restoreParticipant();
@@ -158,11 +231,6 @@ export function AuctionApp() {
         { event: "*", schema: "public", table: "participants", filter: `auction_id=eq.${auctionId}` },
         refresh,
       )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "auctions", filter: `id=eq.${auctionId}` },
-        refresh,
-      )
       .subscribe((status) => {
         if (!active) return;
         if (status === "SUBSCRIBED") setConnection("live");
@@ -178,7 +246,7 @@ export function AuctionApp() {
     };
   }, [auctionId, client, refreshDashboard]);
 
-  if (!configured) return <SetupRequired />;
+  if (demoMode) return <DemoAuctionApp />;
   if (loading) return <LoadingScreen />;
   if (error && !auction) return <ErrorScreen message={error} />;
   if (!auction) return <NoAuction />;
@@ -192,10 +260,149 @@ export function AuctionApp() {
           participant={participant}
           bids={bids}
           connection={connection}
+          onPlaceBid={placeBid}
           refreshDashboard={refreshDashboard}
         />
       ) : (
-        <JoinExperience auction={auction} onJoined={setParticipant} client={client!} />
+        <JoinExperience auction={auction} onJoined={setParticipant} onJoin={joinAuction} />
+      )}
+    </main>
+  );
+}
+
+function DemoAuctionApp() {
+  const [demoState, setDemoState] = useState<DemoAuctionState | null>(null);
+  const [participant, setParticipant] = useState<Participant | null>(null);
+  const demoAuction = useMemo(
+    () => demoState ? selectCurrentAuction(demoState.auctions) : null,
+    [demoState],
+  );
+  const demoBids = useMemo(
+    () => demoState && demoAuction
+      ? demoState.bids.filter((bid) => bid.auction_id === demoAuction.id)
+      : [],
+    [demoAuction, demoState],
+  );
+  const demoParticipants = useMemo(
+    () => demoState && demoAuction
+      ? demoState.participants.filter((item) => item.auction_id === demoAuction.id)
+      : [],
+    [demoAuction, demoState],
+  );
+
+  useEffect(() => {
+    const load = () => {
+      const next = loadDemoAuctionState();
+      const participantId = loadDemoParticipantId();
+      const currentAuction = selectCurrentAuction(next.auctions);
+      setDemoState(next);
+      setParticipant(
+        next.participants.find(
+          (item) => item.id === participantId && item.auction_id === currentAuction?.id,
+        ) ?? null,
+      );
+      saveDemoAuctionState(next);
+    };
+    load();
+
+    const syncAcrossTabs = (event: StorageEvent) => {
+      if (event.key === DEMO_STATE_KEY) load();
+    };
+    window.addEventListener("storage", syncAcrossTabs);
+    return () => window.removeEventListener("storage", syncAcrossTabs);
+  }, []);
+
+  const commitState = useCallback((next: DemoAuctionState) => {
+    setDemoState(next);
+    saveDemoAuctionState(next);
+  }, []);
+
+  const joinDemo = useCallback(async (username: string) => {
+    if (!demoState || !demoAuction) throw new Error("The demo is still loading.");
+    const nameTaken = demoState.participants.some(
+      (item) => item.auction_id === demoAuction.id &&
+        item.username.toLocaleLowerCase() === username.toLocaleLowerCase(),
+    );
+    if (nameTaken) throw new Error("This display name is already in use.");
+
+    const nextParticipant: Participant = {
+      id: crypto.randomUUID(),
+      auction_id: demoAuction.id,
+      username,
+      created_at: new Date().toISOString(),
+    };
+    commitState({
+      ...demoState,
+      participants: [...demoState.participants, nextParticipant],
+    });
+    saveDemoParticipantId(nextParticipant.id);
+    return nextParticipant;
+  }, [commitState, demoAuction, demoState]);
+
+  const placeDemoBid = useCallback(async (amount: number) => {
+    if (!demoState || !demoAuction || !participant) throw new Error("Join the demo before bidding.");
+    if (effectiveStatus(demoAuction) !== "active") {
+      throw new Error("This auction is not accepting bids.");
+    }
+    const minimum = minimumNextBid(
+      demoAuction.starting_price,
+      demoAuction.minimum_increment,
+      demoBids[0]?.amount,
+    );
+    if (amount < minimum) {
+      throw new Error(
+        `Your bid must be at least ${formatMoney(minimum, demoAuction.currency)}.`,
+      );
+    }
+
+    const nextBid: Bid = {
+      id: crypto.randomUUID(),
+      auction_id: demoAuction.id,
+      participant_id: participant.id,
+      amount,
+      created_at: new Date().toISOString(),
+      username: participant.username,
+    };
+    commitState({ ...demoState, bids: [nextBid, ...demoState.bids] });
+    return amount;
+  }, [commitState, demoAuction, demoBids, demoState, participant]);
+
+  const resetDemo = useCallback(() => {
+    const next = createDemoAuctionState();
+    clearDemoParticipantId();
+    setParticipant(null);
+    commitState(next);
+  }, [commitState]);
+
+  if (!demoState) return <LoadingScreen />;
+  if (!demoAuction) return <NoAuction />;
+
+  return (
+    <main className="min-h-screen bg-cream">
+      <div className="bg-lime px-4 py-2 text-sm text-ink sm:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+          <span><strong>Local demo</strong> · Changes are saved in this browser.</span>
+          <button className="font-bold underline underline-offset-4" onClick={resetDemo}>
+            Reset demo
+          </button>
+        </div>
+      </div>
+      <Header connection="live" participantCount={demoParticipants.length} />
+      {participant ? (
+        <AuctionRoom
+          auction={demoAuction}
+          participant={participant}
+          bids={demoBids}
+          connection="live"
+          onPlaceBid={placeDemoBid}
+          refreshDashboard={async () => undefined}
+        />
+      ) : (
+        <JoinExperience
+          auction={demoAuction}
+          onJoined={setParticipant}
+          onJoin={joinDemo}
+        />
       )}
     </main>
   );
@@ -229,10 +436,10 @@ function Header({
   );
 }
 
-function JoinExperience({ auction, onJoined, client }: {
+function JoinExperience({ auction, onJoined, onJoin }: {
   auction: Auction;
   onJoined: (participant: Participant) => void;
-  client: ReturnType<typeof getSupabaseBrowserClient>;
+  onJoin: (username: string) => Promise<Participant>;
 }) {
   const [username, setUsername] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -250,22 +457,7 @@ function JoinExperience({ auction, onJoined, client }: {
     setSubmitting(true);
     setMessage("");
     try {
-      const { data: sessionData } = await client.auth.getSession();
-      if (!sessionData.session) {
-        const { error: authError } = await client.auth.signInAnonymously();
-        if (authError) throw new Error(
-          authError.message.includes("Anonymous sign-ins are disabled")
-            ? "Anonymous sign-ins are disabled. Enable them in Supabase Authentication settings."
-            : authError.message,
-        );
-      }
-      const { data, error } = await client.rpc("join_auction", {
-        p_auction_id: auction.id,
-        p_username: cleanUsername,
-      });
-      if (error) throw error;
-      if (!data?.[0]) throw new Error("The auction could not be joined.");
-      onJoined(data[0] as Participant);
+      onJoined(await onJoin(cleanUsername));
     } catch (joinError) {
       setMessage(joinError instanceof Error ? joinError.message : "Could not join the auction.");
     } finally {
@@ -335,17 +527,17 @@ function JoinExperience({ auction, onJoined, client }: {
   );
 }
 
-function AuctionRoom({ auction, participant, bids, connection, refreshDashboard }: {
+function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refreshDashboard }: {
   auction: Auction;
   participant: Participant;
   bids: Bid[];
   connection: ConnectionState;
+  onPlaceBid: (amount: number) => Promise<number>;
   refreshDashboard: () => Promise<void>;
 }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "error" | "success"; text: string } | null>(null);
-  const client = getSupabaseBrowserClient();
   const status = effectiveStatus(auction);
   const highest = bids[0];
   const minimum = minimumNextBid(auction.starting_price, auction.minimum_increment, highest?.amount);
@@ -366,15 +558,11 @@ function AuctionRoom({ auction, participant, bids, connection, refreshDashboard 
     setSubmitting(true);
     setFeedback(null);
     try {
-      const { data, error } = await client.rpc("place_bid", {
-        p_auction_id: auction.id,
-        p_amount: parsed,
-      });
-      if (error) throw error;
+      const acceptedAmount = await onPlaceBid(parsed);
       setAmount("");
       setFeedback({
         kind: "success",
-        text: `Bid accepted at ${formatMoney(Number(data?.[0]?.amount ?? parsed), auction.currency)}.`,
+        text: `Bid accepted at ${formatMoney(acceptedAmount, auction.currency)}.`,
       });
       await refreshDashboard();
     } catch (bidError) {
@@ -509,19 +697,6 @@ function AuctionRoom({ auction, participant, bids, connection, refreshDashboard 
         <Link href="/admin" className="text-link">Auction administration</Link>
       </footer>
     </div>
-  );
-}
-
-function SetupRequired() {
-  return (
-    <main className="grid min-h-screen place-items-center bg-cream p-5">
-      <section className="panel max-w-xl p-7 sm:p-10">
-        <span className="brand-mark mb-6">A</span>
-        <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Setup required</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Connect your Supabase project</h1>
-        <p className="mt-4 leading-7 text-ink/60">Copy <code>.env.example</code> to <code>.env.local</code>, add the project URL and publishable key, then restart the app. The README includes the migration and authentication steps.</p>
-      </section>
-    </main>
   );
 }
 

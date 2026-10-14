@@ -22,27 +22,34 @@ function configurationError(error: unknown) {
   return NextResponse.json({ error: message }, { status: 503 });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!(await isAdminRequest())) return unauthorized();
   try {
-    const { data, error } = await getSupabaseAdminClient()
+    const client = getSupabaseAdminClient();
+    const { data, error } = await client
       .from("auctions")
       .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("sort_order", { ascending: true });
     if (error) throw error;
+    const auctions = data ?? [];
+    const requestedId = new URL(request.url).searchParams.get("auctionId");
+    const selected =
+      auctions.find((auction) => auction.id === requestedId) ??
+      auctions.find((auction) => auction.status === "active") ??
+      auctions.find((auction) => auction.status === "upcoming") ??
+      [...auctions].reverse().find((auction) => auction.status === "ended") ??
+      null;
     let bids: unknown[] = [];
-    if (data) {
-      const result = await getSupabaseAdminClient()
+    if (selected) {
+      const result = await client
         .from("bids")
         .select("id, amount, created_at, participants(username)")
-        .eq("auction_id", data.id)
+        .eq("auction_id", selected.id)
         .order("created_at", { ascending: false });
       if (result.error) throw result.error;
       bids = result.data ?? [];
     }
-    return NextResponse.json({ auction: data, bids });
+    return NextResponse.json({ auctions, auction: selected, bids });
   } catch (error) {
     return configurationError(error);
   }
@@ -110,18 +117,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A valid auction action is required." }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
-  const values =
-    body.action === "start"
-      ? { status: "active", starts_at: now, ends_at: null }
-      : { status: "ended", ends_at: now };
-
   try {
-    const { data, error } = await getSupabaseAdminClient()
+    const client = getSupabaseAdminClient();
+    if (body.action === "start") {
+      const { error: activationError } = await client.rpc("activate_auction", {
+        p_auction_id: body.id,
+      });
+      if (activationError) throw activationError;
+    } else {
+      const { error: endError } = await client
+        .from("auctions")
+        .update({ status: "ended", ends_at: new Date().toISOString() })
+        .eq("id", body.id)
+        .eq("status", "active")
+        .select("id")
+        .single();
+      if (endError) throw endError;
+    }
+    const { data, error } = await client
       .from("auctions")
-      .update(values)
-      .eq("id", body.id)
       .select("*")
+      .eq("id", body.id)
       .single();
     if (error) throw error;
     return NextResponse.json({ auction: data });

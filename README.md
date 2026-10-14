@@ -1,6 +1,6 @@
 # RBAuctionTool
 
-A responsive live-auction application built with Next.js, TypeScript, Tailwind CSS, Supabase PostgreSQL/Auth/Realtime, and Netlify. Participants join with an unverified display name, submit bids through an atomic database function, and receive accepted bids over a Supabase Realtime channel. A separate server-protected page manages the current lot.
+A responsive live-auction application built with Next.js, TypeScript, Tailwind CSS, Supabase PostgreSQL/Auth/Realtime, and Netlify. Participants join with an unverified display name, submit bids through an atomic database function, and receive accepted bids over a Supabase Realtime channel. A separate server-protected page manages an ordered queue of auction products.
 
 ## What is included
 
@@ -10,28 +10,32 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
 - Protected `/admin` page for creating/editing, starting, and ending an auction and viewing bid history
+- Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
 
 ## Local setup
 
-Requirements: Node.js 20+, npm, and a Supabase project.
+Requirements: Node.js 20+ and npm. Supabase is optional for the local demo.
 
 ```bash
 npm install
-cp .env.example .env.local
 npm run dev
 ```
 
-On PowerShell, use `Copy-Item .env.example .env.local` instead of `cp`.
-
 Open `http://localhost:3000`. Administration is at `http://localhost:3000/admin`.
+
+When no Supabase environment variables are configured, the app automatically starts in local demo mode. It includes a live sample lot, participants, bids, working bid submission, and an editable administration page. Demo changes are stored in the browser and can be reset from either page.
+
+Set `NEXT_PUBLIC_DEMO_MODE=true` to force the local demo while keeping Supabase credentials in `.env.local`.
+
+To connect Supabase later, copy `.env.example` to `.env.local` (`Copy-Item .env.example .env.local` in PowerShell), fill in the project values, and restart the development server.
 
 ## Supabase setup
 
 1. Create or select a Supabase project.
 2. In **Authentication → Providers → Anonymous**, enable anonymous sign-ins. This is required: a participant's database record is bound to an anonymous Auth user, rather than trusting a participant ID sent by the browser.
-3. Apply [`supabase/migrations/202610140001_live_auction.sql`](supabase/migrations/202610140001_live_auction.sql).
+3. Apply all files in [`supabase/migrations`](supabase/migrations) in filename order.
 4. Optionally apply [`supabase/seed.sql`](supabase/seed.sql) to create the preview auction. Otherwise, configure the environment and create the first lot at `/admin`.
 
 With the Supabase CLI linked to the project:
@@ -41,7 +45,7 @@ supabase db push
 supabase db seed  # optional preview data
 ```
 
-Alternatively, paste the migration into **SQL Editor** and run it once. The migration creates the tables, constraints, RLS policies, RPC functions, grants, indexes, and Realtime publication entries. No additional Realtime policy step is required. In **Database → Replication**, verify `auctions`, `bids`, and `participants` appear in the `supabase_realtime` publication.
+Alternatively, paste each migration into **SQL Editor** and run them in filename order. The migrations create the tables, queue order, constraints, RLS policies, RPC functions, grants, indexes, and Realtime publication entries. No additional Realtime policy step is required. In **Database → Pipelines**, verify `auctions`, `bids`, and `participants` appear in the `supabase_realtime` publication.
 
 The migration grants public read access only to auction display data, public participant fields, and accepted bids. Browser roles cannot insert/update/delete those tables directly. `join_auction`, `get_my_participant`, and `place_bid` are the only participant RPCs, and they are available only to authenticated users.
 
@@ -58,12 +62,12 @@ Copy `.env.example` to `.env.local` and set:
 
 Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. Do not commit `.env.local`; secret-bearing `.env*` files are ignored.
 
-## Create and run the first auction
+## Create and run the product queue
 
 1. Start the app and visit `/admin`.
 2. Enter the value configured as `ADMIN_SECRET`. A secure, HTTP-only, same-site cookie is issued for eight hours.
-3. Enter the product name, description, image URL, starting price, minimum increment, and three-letter currency code, then create the lot.
-4. Select **Start auction** when bidding should open. Select **End auction** to close it. These actions are checked again by the server route; hiding or showing the controls is not the authorization boundary.
+3. Enter the product name, description, image URL, starting price, minimum increment, and three-letter currency code, then add the product to the queue. Repeat this for every product.
+4. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot. Choose **End bidding** to close it. These actions are checked again by the server route; hiding or showing the controls is not the authorization boundary.
 
 The first acceptable bid is `starting price + minimum increment`. Every later bid must be at least `current highest bid + minimum increment`.
 
@@ -102,4 +106,4 @@ This is an MVP, not a real-money auction platform. Before accepting valuable or 
 
 Anonymous Auth binds actions to a browser session, but a participant can clear storage or use another browser to obtain another identity. Display names remain unverified. The admin secret is a shared credential; rotate it if exposed and replace it with individual administrator accounts and role claims for multi-admin use. The service-role key is confined to server routes, but those routes should receive platform-level rate limiting before public launch.
 
-The app manages the newest auction as the current lot. Supporting simultaneous rooms requires an auction selector or auction-specific route. Automatic scheduled transitions are not included; start/end are admin actions, while the bid function still enforces any configured time bounds. Money uses two-decimal `numeric` values and a configurable ISO currency code; it does not handle currencies with unusual minor units.
+The app manages an ordered product queue with exactly one active lot at a time. Supporting simultaneous auction rooms requires auction-specific routes and room selection. Automatic scheduled transitions are not included; start/end are admin actions, while the bid function still enforces any configured time bounds. Money uses two-decimal `numeric` values and a configurable ISO currency code; it does not handle currencies with unusual minor units.

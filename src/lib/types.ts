@@ -11,6 +11,7 @@ export type Auction = {
   status: AuctionStatus;
   starts_at: string | null;
   ends_at: string | null;
+  sort_order: number;
   created_at: string;
 };
 
