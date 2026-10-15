@@ -19,6 +19,10 @@ function unauthorized() {
 }
 
 function configurationError(error: unknown) {
+  const details = error instanceof Error
+    ? `${error.name}: ${error.message}${error.cause ? `\nCause: ${String(error.cause)}` : ""}`
+    : JSON.stringify(error);
+  console.error(`Admin Supabase request failed. ${details}`);
   const message = error instanceof Error ? error.message : "Server configuration error.";
   return NextResponse.json({ error: message }, { status: 503 });
 }

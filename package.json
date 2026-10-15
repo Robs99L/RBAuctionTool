@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ./scripts/next-with-system-ca.mjs dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node ./scripts/next-with-system-ca.mjs start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
