@@ -4,8 +4,8 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 
 ## What is included
 
-- Anonymous participant sessions persisted by the Supabase browser client
-- Duplicate display-name prevention per auction
+- Anonymous participant sessions persisted across every product lot by the Supabase browser client
+- Duplicate display-name prevention per product lot
 - Realtime bid history, highest bid, leading participant, and connection state
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
@@ -47,7 +47,7 @@ supabase db seed  # optional preview data
 
 Alternatively, paste each migration into **SQL Editor** and run them in filename order. The migrations create the tables, queue order, constraints, RLS policies, RPC functions, grants, indexes, and Realtime publication entries. No additional Realtime policy step is required. In **Database → Pipelines**, verify `auctions`, `bids`, and `participants` appear in the `supabase_realtime` publication.
 
-The migration grants public read access only to auction display data, public participant fields, and accepted bids. Browser roles cannot insert/update/delete those tables directly. `join_auction`, `get_my_participant`, and `place_bid` are the only participant RPCs, and they are available only to authenticated users.
+The migration grants public read access only to auction display data, public participant fields, and accepted bids. Browser roles cannot insert/update/delete those tables directly. `join_auction`, `get_my_participant`, `get_my_auction_identity`, and `place_bid` are the only participant RPCs, and they are available only to authenticated users. After joining once, the browser reuses the verified anonymous session and display name to enter each following product lot automatically.
 
 ## Environment variables
 

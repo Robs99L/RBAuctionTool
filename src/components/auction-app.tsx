@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { selectCurrentAuction } from "@/lib/auction-queue";
 import { minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
 import { formatMoney, formatTime } from "@/lib/format";
+import { continueParticipantAcrossLots } from "@/lib/participant-session";
 import {
   ensureAnonymousSupabaseSession,
   getSupabaseBrowserClient,
@@ -63,6 +64,7 @@ export function AuctionApp() {
   const [bids, setBids] = useState<Bid[]>([]);
   const [participantCount, setParticipantCount] = useState(0);
   const [loading, setLoading] = useState(configured && !demoMode);
+  const [restoredAuctionId, setRestoredAuctionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const auctionId = auction?.id;
@@ -118,7 +120,20 @@ export function AuctionApp() {
       p_auction_id: auctionId,
       p_username: username,
     });
-    if (joinError) throw joinError;
+    if (joinError) {
+      const { data: existingData, error: existingError } = await client.rpc(
+        "get_my_participant",
+        { p_auction_id: auctionId },
+      );
+      const existingParticipant = existingData?.[0] as Participant | undefined;
+      if (
+        !existingError &&
+        existingParticipant?.username.toLocaleLowerCase() === username.toLocaleLowerCase()
+      ) {
+        return existingParticipant;
+      }
+      throw joinError;
+    }
     if (!data?.[0]) throw new Error("The auction could not be joined.");
     return data[0] as Participant;
   }, [auctionId, client]);
@@ -190,7 +205,25 @@ export function AuctionApp() {
           p_auction_id: auctionId,
         });
         if (restoreError) throw restoreError;
-        if (active) setParticipant(data?.[0] ? data[0] as Participant : null);
+        if (!active) return;
+
+        const currentParticipant = data?.[0] ? data[0] as Participant : null;
+        let previousUsername: string | null = null;
+        if (!currentParticipant) {
+          const { data: identityData, error: identityError } = await client!.rpc(
+            "get_my_auction_identity",
+          );
+          if (identityError) throw identityError;
+          previousUsername = identityData?.[0]?.username ?? null;
+        }
+        if (!active) return;
+
+        const restoredParticipant = await continueParticipantAcrossLots(
+          currentParticipant,
+          previousUsername,
+          joinAuction,
+        );
+        if (active) setParticipant(restoredParticipant);
       } catch (restoreError) {
         if (active) {
           setError(
@@ -199,6 +232,8 @@ export function AuctionApp() {
               : "Could not restore the participant session.",
           );
         }
+      } finally {
+        if (active) setRestoredAuctionId(auctionId ?? null);
       }
     }
 
@@ -206,7 +241,7 @@ export function AuctionApp() {
     return () => {
       active = false;
     };
-  }, [auctionId, client]);
+  }, [auctionId, client, joinAuction]);
 
   useEffect(() => {
     if (!client || !auctionId) return;
@@ -253,6 +288,9 @@ export function AuctionApp() {
   if (loading) return <LoadingScreen />;
   if (error && !auction) return <ErrorScreen message={error} />;
   if (!auction) return <NoAuction />;
+  if (restoredAuctionId !== auctionId || (participant && participant.auction_id !== auctionId)) {
+    return <LoadingScreen />;
+  }
 
   return (
     <main className="min-h-screen bg-cream">
@@ -287,10 +325,8 @@ function DemoAuctionApp() {
     [demoAuction, demoState],
   );
   const demoParticipants = useMemo(
-    () => demoState && demoAuction
-      ? demoState.participants.filter((item) => item.auction_id === demoAuction.id)
-      : [],
-    [demoAuction, demoState],
+    () => demoState?.participants ?? [],
+    [demoState],
   );
 
   useEffect(() => {
@@ -299,10 +335,11 @@ function DemoAuctionApp() {
       const participantId = loadDemoParticipantId();
       const currentAuction = selectCurrentAuction(next.auctions);
       setDemoState(next);
+      const existingParticipant = next.participants.find((item) => item.id === participantId);
       setParticipant(
-        next.participants.find(
-          (item) => item.id === participantId && item.auction_id === currentAuction?.id,
-        ) ?? null,
+        existingParticipant && currentAuction
+          ? { ...existingParticipant, auction_id: currentAuction.id }
+          : null,
       );
       saveDemoAuctionState(next);
     };
@@ -323,8 +360,7 @@ function DemoAuctionApp() {
   const joinDemo = useCallback(async (username: string) => {
     if (!demoState || !demoAuction) throw new Error("The demo is still loading.");
     const nameTaken = demoState.participants.some(
-      (item) => item.auction_id === demoAuction.id &&
-        item.username.toLocaleLowerCase() === username.toLocaleLowerCase(),
+      (item) => item.username.toLocaleLowerCase() === username.toLocaleLowerCase(),
     );
     if (nameTaken) throw new Error("This display name is already in use.");
 
@@ -492,7 +528,7 @@ function JoinExperience({ auction, onJoined, onJoin }: {
           <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-forest">You’re invited</p>
           <h2 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Join the bidding.</h2>
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
-            Choose a display name to enter this auction. No account setup is needed.
+            Choose your display name once. You stay in the auction automatically when the next product starts.
           </p>
           <form className="mt-9" onSubmit={join}>
             <label className="field-label" htmlFor="username">Display name</label>
