@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { AuctionTimer } from "@/components/auction-timer";
 import { selectCurrentAuction } from "@/lib/auction-queue";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
@@ -389,6 +390,7 @@ function DemoAuctionApp() {
       demoAuction.starting_price,
       demoAuction.minimum_increment,
       demoBids[0]?.amount,
+      demoBids[0]?.participant_id === participant.id,
     );
     if (amount < minimum) {
       throw new Error(
@@ -532,6 +534,12 @@ function JoinExperience({ auction, onJoined, onJoin }: {
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
             Choose your display name once. You stay in the auction automatically when the next product starts.
           </p>
+          <AuctionTimer
+            startsAt={auction.starts_at}
+            status={status}
+            compact
+            className="mt-6"
+          />
           <form className="mt-9" onSubmit={join}>
             <label className="field-label" htmlFor="username">Display name</label>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -582,7 +590,13 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
   const [feedback, setFeedback] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const status = effectiveStatus(auction);
   const highest = bids[0];
-  const minimum = minimumNextBid(auction.starting_price, auction.minimum_increment, highest?.amount);
+  const isLeadingParticipant = highest?.participant_id === participant.id;
+  const minimum = minimumNextBid(
+    auction.starting_price,
+    auction.minimum_increment,
+    highest?.amount,
+    isLeadingParticipant,
+  );
   const winningRanks = new Map(
     selectWinningBids(bids, auction.winner_count).map((bid) => [bid.id, bid.rank]),
   );
@@ -647,6 +661,11 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   </div>
                   <h1 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">{auction.title}</h1>
                   <p className="mt-4 leading-7 text-ink/60">{auction.description}</p>
+                  <AuctionTimer
+                    startsAt={auction.starts_at}
+                    status={status}
+                    className="mt-6"
+                  />
                 </div>
                 <div className="mt-8 flex flex-wrap gap-8 border-t border-ink/10 pt-5 text-sm">
                   <div><span className="block text-ink/45">Opening</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
@@ -737,7 +756,11 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   aria-describedby="bid-help"
                 />
               </div>
-              <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">Bids are final for this MVP. The database rechecks the amount when submitted.</p>
+              <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
+                {isLeadingParticipant
+                  ? "You are leading and can raise your own bid by any amount."
+                  : "The database rechecks the amount when submitted."}
+              </p>
               <button className="btn-primary mt-5 w-full" disabled={status !== "active" || submitting}>
                 {submitting ? "Checking bid…" : status === "active" ? "Place bid" : status === "ended" ? "Auction ended" : "Auction not started"}
               </button>

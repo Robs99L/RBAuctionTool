@@ -2,9 +2,13 @@ export function minimumNextBid(
   startingPrice: number,
   minimumIncrement: number,
   highestBid?: number | null,
+  isHighestBidder = false,
 ) {
   const base = highestBid ?? startingPrice;
-  return roundCurrency(base + minimumIncrement);
+  const increment = highestBid !== null && highestBid !== undefined && isHighestBidder
+    ? 0.01
+    : minimumIncrement;
+  return roundCurrency(base + increment);
 }
 
 export function parseBidAmount(value: string) {

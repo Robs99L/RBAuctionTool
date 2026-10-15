@@ -7,6 +7,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Anonymous participant sessions persisted across every product lot by the Supabase browser client
 - Duplicate display-name prevention per product lot
 - Realtime bid history, highest bid, leading participant, and connection state
+- A two-minute visual countdown that starts with each product's bidding phase and remains display-only; closing stays a manual administrator action
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
 - Protected `/admin` page for creating/editing, starting, and ending an auction, uploading product images, configuring how many distinct highest bidders win, and viewing ranked bid history
@@ -70,6 +71,7 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 4. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot. Choose **End bidding** to close it. These actions are checked again by the server route; hiding or showing the controls is not the authorization boundary.
 
 The first acceptable bid is `starting price + minimum increment`. Every later bid must be at least `current highest bid + minimum increment`.
+The visible timer counts down from two minutes using the product's server-recorded start time. Reaching `00:00` does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**.
 
 ## Test two participants
 

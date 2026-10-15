@@ -8,6 +8,11 @@ describe("bid rules", () => {
     expect(minimumNextBid(50, 2.5, 61)).toBe(63.5);
   });
 
+  it("lets the leading participant raise their own bid by one cent", () => {
+    expect(minimumNextBid(50, 2.5, 61, true)).toBe(61.01);
+    expect(minimumNextBid(50, 2.5, null, true)).toBe(52.5);
+  });
+
   it("accepts two-decimal currency input", () => {
     expect(parseBidAmount(" 12.50 ")).toBe(12.5);
     expect(parseBidAmount("12,50")).toBe(12.5);

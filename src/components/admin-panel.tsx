@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { AuctionTimer } from "@/components/auction-timer";
 import { orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
 import { selectWinningBids } from "@/lib/auction-winners";
 import {
@@ -577,6 +578,15 @@ function AuctionManagerView({
             </div>
             {auction && <span className="status-pill"><span className={`status-dot ${auction.status}`} />{auction.status}</span>}
           </div>
+
+          {auction && (
+            <AuctionTimer
+              startsAt={auction.starts_at}
+              status={auction.status}
+              compact
+              className="mb-7"
+            />
+          )}
 
           <form key={auctionKey} onSubmit={onSave} className="space-y-5">
             <div>
