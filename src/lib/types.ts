@@ -7,6 +7,7 @@ export type Auction = {
   image_url: string | null;
   starting_price: number;
   minimum_increment: number;
+  winner_count: number;
   currency: string;
   status: AuctionStatus;
   starts_at: string | null;

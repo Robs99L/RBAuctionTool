@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
+import { selectWinningBids } from "@/lib/auction-winners";
 import {
   clearDemoParticipantId,
   createDemoAuctionState,
@@ -16,6 +17,7 @@ import type { Auction } from "@/lib/types";
 
 type AdminBid = {
   id: string;
+  participant_id: string;
   amount: number;
   created_at: string;
   username: string;
@@ -27,6 +29,7 @@ type FormState = {
   imageUrl: string;
   startingPrice: string;
   minimumIncrement: string;
+  winnerCount: string;
   currency: string;
 };
 
@@ -38,6 +41,7 @@ const emptyForm: FormState = {
   imageUrl: "",
   startingPrice: "0",
   minimumIncrement: "1",
+  winnerCount: "1",
   currency: "EUR",
 };
 
@@ -48,6 +52,7 @@ function formFromAuction(auction: Auction): FormState {
     imageUrl: auction.image_url ?? "",
     startingPrice: String(auction.starting_price),
     minimumIncrement: String(auction.minimum_increment),
+    winnerCount: String(auction.winner_count),
     currency: auction.currency,
   };
 }
@@ -57,6 +62,7 @@ function normalizedAuction(auction: Auction): Auction {
     ...auction,
     starting_price: Number(auction.starting_price),
     minimum_increment: Number(auction.minimum_increment),
+    winner_count: Number(auction.winner_count ?? 1),
     sort_order: Number(auction.sort_order),
   };
 }
@@ -69,6 +75,7 @@ function extractParticipant(value: unknown) {
 function mapAdminBids(rows: Array<Record<string, unknown>> = []): AdminBid[] {
   return rows.map((bid) => ({
     id: String(bid.id),
+    participant_id: String(bid.participant_id),
     amount: Number(bid.amount),
     created_at: String(bid.created_at),
     username: extractParticipant(bid.participants) ?? String(bid.username ?? "Unknown participant"),
@@ -216,6 +223,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
           imageUrl: form.imageUrl,
           startingPrice: Number(form.startingPrice),
           minimumIncrement: Number(form.minimumIncrement),
+          winnerCount: Number(form.winnerCount),
           currency: form.currency,
         }),
       });
@@ -332,8 +340,17 @@ function DemoAuctionEditor() {
     if (!demoState) return;
     const startingPrice = Number(form.startingPrice);
     const minimumIncrement = Number(form.minimumIncrement);
-    if (!Number.isFinite(startingPrice) || startingPrice < 0 || !Number.isFinite(minimumIncrement) || minimumIncrement <= 0) {
-      setMessage({ kind: "error", text: "Enter valid pricing details." });
+    const winnerCount = Number(form.winnerCount);
+    if (
+      !Number.isFinite(startingPrice) ||
+      startingPrice < 0 ||
+      !Number.isFinite(minimumIncrement) ||
+      minimumIncrement <= 0 ||
+      !Number.isSafeInteger(winnerCount) ||
+      winnerCount < 1 ||
+      winnerCount > 1000
+    ) {
+      setMessage({ kind: "error", text: "Enter valid pricing details and 1 to 1000 winning bidders." });
       return;
     }
     const now = new Date().toISOString();
@@ -345,6 +362,7 @@ function DemoAuctionEditor() {
         image_url: form.imageUrl.trim() || null,
         starting_price: startingPrice,
         minimum_increment: minimumIncrement,
+        winner_count: winnerCount,
         currency: form.currency.trim().toUpperCase(),
       }
       : {
@@ -354,6 +372,7 @@ function DemoAuctionEditor() {
         image_url: form.imageUrl.trim() || null,
         starting_price: startingPrice,
         minimum_increment: minimumIncrement,
+        winner_count: winnerCount,
         currency: form.currency.trim().toUpperCase(),
         status: "upcoming",
         starts_at: null,
@@ -460,6 +479,11 @@ function AuctionManagerView({
   onSignOut?: () => void;
   onReset?: () => void;
 }) {
+  const winningRanks = new Map(
+    (auction ? selectWinningBids(bids, auction.winner_count) : [])
+      .map((bid) => [bid.id, bid.rank]),
+  );
+
   function updateField(field: keyof FormState, value: string) {
     onFormChange({ ...form, [field]: value });
   }
@@ -496,6 +520,9 @@ function AuctionManagerView({
               >
                 <span className={`text-xs font-bold uppercase tracking-[.12em] ${auction?.id === item.id ? "text-white/55" : "text-ink/45"}`}>Lot {index + 1}</span>
                 <strong className="mt-2 block truncate">{item.title}</strong>
+                <span className={`mt-1 block text-xs ${auction?.id === item.id ? "text-white/60" : "text-ink/45"}`}>
+                  {item.winner_count} {item.winner_count === 1 ? "winner" : "winners"}
+                </span>
                 <span className={`mt-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.08em] ${auction?.id === item.id ? "text-white/75" : "text-ink/55"}`}>
                   <span className={`status-dot ${item.status}`} />{item.status}
                 </span>
@@ -530,7 +557,7 @@ function AuctionManagerView({
               <label className="field-label" htmlFor="image">Product image URL</label>
               <input id="image" type="url" className="field" value={form.imageUrl} onChange={(event) => updateField("imageUrl", event.target.value)} placeholder="https://…" />
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label className="field-label" htmlFor="starting-price">Starting price</label>
                 <input id="starting-price" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} required />
@@ -538,6 +565,10 @@ function AuctionManagerView({
               <div>
                 <label className="field-label" htmlFor="increment">Minimum step</label>
                 <input id="increment" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} required />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="winner-count">Winning bidders</label>
+                <input id="winner-count" type="number" min="1" max="1000" step="1" className="field" value={form.winnerCount} onChange={(event) => updateField("winnerCount", event.target.value)} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="currency">Currency</label>
@@ -562,20 +593,31 @@ function AuctionManagerView({
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected product</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid history</h2>
+              {auction && (
+                <p className="mt-1 text-xs text-ink/45">
+                  Top {auction.winner_count} distinct {auction.winner_count === 1 ? "bidder wins" : "bidders win"}
+                </p>
+              )}
             </div>
             <button className="text-link" onClick={onRefresh}>Refresh</button>
           </div>
           {bids.length && auction ? (
             <ol className="mt-5 divide-y divide-ink/10">
-              {bids.map((bid) => (
+              {bids.map((bid) => {
+                const winningRank = winningRanks.get(bid.id);
+                return (
                 <li key={bid.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{bid.username}</p>
+                    <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                      <span className="truncate">{bid.username}</span>
+                      {winningRank && <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
+                    </p>
                     <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
                   </div>
                   <strong className="text-sm tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
                 </li>
-              ))}
+                );
+              })}
             </ol>
           ) : (
             <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No accepted bids for this product yet.</div>

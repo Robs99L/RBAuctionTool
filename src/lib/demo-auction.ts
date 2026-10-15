@@ -43,6 +43,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         image_url: null,
         starting_price: 550,
         minimum_increment: 25,
+        winner_count: 1,
         currency: "EUR",
         status: "active",
         starts_at: new Date(now - 30 * 60 * 1000).toISOString(),
@@ -58,6 +59,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         image_url: null,
         starting_price: 280,
         minimum_increment: 20,
+        winner_count: 5,
         currency: "EUR",
         status: "upcoming",
         starts_at: null,
@@ -73,6 +75,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         image_url: null,
         starting_price: 180,
         minimum_increment: 10,
+        winner_count: 1,
         currency: "EUR",
         status: "upcoming",
         starts_at: null,
@@ -121,7 +124,13 @@ export function loadDemoAuctionState() {
       Array.isArray(parsed.bids) &&
       Array.isArray(parsed.participants)
     ) {
-      return parsed as DemoAuctionState;
+      return {
+        ...parsed,
+        auctions: parsed.auctions.map((auction) => ({
+          ...auction,
+          winner_count: Number(auction.winner_count ?? 1),
+        })),
+      } as DemoAuctionState;
     }
   } catch {
     // Invalid or unavailable browser storage falls back to a fresh demo.

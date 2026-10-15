@@ -32,6 +32,7 @@ function normalizeAuction(value: Record<string, unknown>): Auction {
     ...(value as unknown as Auction),
     starting_price: Number(value.starting_price),
     minimum_increment: Number(value.minimum_increment),
+    winner_count: Number(value.winner_count ?? 1),
     sort_order: Number(value.sort_order),
   };
 }
@@ -559,6 +560,7 @@ function JoinExperience({ auction, onJoined, onJoin }: {
           <div className="mt-9 flex items-center gap-6 border-t border-ink/10 pt-6 text-sm">
             <div><span className="block text-ink/45">Opening price</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
             <div><span className="block text-ink/45">Minimum step</span><strong className="mt-1 block">{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
+            <div><span className="block text-ink/45">Winning bidders</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
           </div>
         </div>
       </section>
@@ -642,9 +644,10 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   <h1 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">{auction.title}</h1>
                   <p className="mt-4 leading-7 text-ink/60">{auction.description}</p>
                 </div>
-                <div className="mt-8 flex gap-10 border-t border-ink/10 pt-5 text-sm">
+                <div className="mt-8 flex flex-wrap gap-8 border-t border-ink/10 pt-5 text-sm">
                   <div><span className="block text-ink/45">Opening</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                   <div><span className="block text-ink/45">Bid step</span><strong className="mt-1 block">+{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
+                  <div><span className="block text-ink/45">Winner spots</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
                 </div>
               </div>
             </div>

@@ -10,6 +10,7 @@ type AuctionInput = {
   imageUrl?: string;
   startingPrice?: number;
   minimumIncrement?: number;
+  winnerCount?: number;
   currency?: string;
 };
 
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
     if (selected) {
       const result = await client
         .from("bids")
-        .select("id, amount, created_at, participants(username)")
+        .select("id, participant_id, amount, created_at, participants(username)")
         .eq("auction_id", selected.id)
         .order("created_at", { ascending: false });
       if (result.error) throw result.error;
@@ -61,6 +62,7 @@ export async function PUT(request: Request) {
   const title = body?.title?.trim() ?? "";
   const startingPrice = Number(body?.startingPrice);
   const minimumIncrement = Number(body?.minimumIncrement);
+  const winnerCount = Number(body?.winnerCount);
   const currency = body?.currency?.trim().toUpperCase() ?? "";
   const imageUrl = body?.imageUrl?.trim() ?? "";
 
@@ -80,9 +82,12 @@ export async function PUT(request: Request) {
     startingPrice < 0 ||
     !Number.isFinite(minimumIncrement) ||
     minimumIncrement <= 0 ||
+    !Number.isSafeInteger(winnerCount) ||
+    winnerCount < 1 ||
+    winnerCount > 1000 ||
     !/^[A-Z]{3}$/.test(currency)
   ) {
-    return NextResponse.json({ error: "Check the title, prices, and currency." }, { status: 400 });
+    return NextResponse.json({ error: "Check the title, prices, winner count, and currency." }, { status: 400 });
   }
 
   const values = {
@@ -91,6 +96,7 @@ export async function PUT(request: Request) {
     image_url: imageUrl.slice(0, 2000) || null,
     starting_price: startingPrice,
     minimum_increment: minimumIncrement,
+    winner_count: winnerCount,
     currency,
   };
 
