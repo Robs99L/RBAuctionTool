@@ -9,7 +9,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Realtime bid history, highest bid, leading participant, and connection state
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
-- Protected `/admin` page for creating/editing, starting, and ending an auction, configuring how many distinct highest bidders win, and viewing ranked bid history
+- Protected `/admin` page for creating/editing, starting, and ending an auction, uploading product images, configuring how many distinct highest bidders win, and viewing ranked bid history
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
@@ -66,7 +66,7 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 
 1. Start the app and visit `/admin`.
 2. Enter the value configured as `ADMIN_SECRET`. A secure, HTTP-only, same-site cookie is issued for eight hours.
-3. Enter the product name, description, image URL, starting price, minimum increment, number of winning bidders, and three-letter currency code, then add the product to the queue. Repeat this for every product. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
+3. Enter the product name, description, optional PNG/JPEG image (up to 4 MB), starting price, minimum increment, number of winning bidders, and three-letter currency code, then add the product to the queue. Repeat this for every product. The server creates a public `product-images` Supabase Storage bucket on the first upload; browser clients never receive the server key or direct upload permission. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
 4. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot. Choose **End bidding** to close it. These actions are checked again by the server route; hiding or showing the controls is not the authorization boundary.
 
 The first acceptable bid is `starting price + minimum increment`. Every later bid must be at least `current highest bid + minimum increment`.

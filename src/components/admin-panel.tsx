@@ -35,6 +35,10 @@ type FormState = {
 
 type Message = { kind: "error" | "success"; text: string } | null;
 
+const PRODUCT_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const DEMO_IMAGE_MAX_BYTES = 1024 * 1024;
+const PRODUCT_IMAGE_TYPES = ["image/png", "image/jpeg"];
+
 const emptyForm: FormState = {
   title: "",
   description: "",
@@ -80,6 +84,15 @@ function mapAdminBids(rows: Array<Record<string, unknown>> = []): AdminBid[] {
     created_at: String(bid.created_at),
     username: extractParticipant(bid.participants) ?? String(bid.username ?? "Unknown participant"),
   }));
+}
+
+function fileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Could not read the image.")));
+    reader.readAsDataURL(file);
+  });
 }
 
 export function AdminPanel() {
@@ -207,25 +220,17 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     return () => window.clearTimeout(initialLoad);
   }, [load]);
 
-  async function save(event: FormEvent) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setMessage(null);
     const creating = !auction;
     try {
+      const payload = new FormData(event.currentTarget);
+      if (auction) payload.set("id", auction.id);
       const response = await fetch("/api/admin/auction", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: auction?.id,
-          title: form.title,
-          description: form.description,
-          imageUrl: form.imageUrl,
-          startingPrice: Number(form.startingPrice),
-          minimumIncrement: Number(form.minimumIncrement),
-          winnerCount: Number(form.winnerCount),
-          currency: form.currency,
-        }),
+        body: payload,
       });
       const data = (await response.json()) as { auction?: Auction; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not save the product.");
@@ -335,9 +340,10 @@ function DemoAuctionEditor() {
     saveDemoAuctionState(next);
   }, []);
 
-  function save(event: FormEvent) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!demoState) return;
+    setMessage(null);
     const startingPrice = Number(form.startingPrice);
     const minimumIncrement = Number(form.minimumIncrement);
     const winnerCount = Number(form.winnerCount);
@@ -353,13 +359,28 @@ function DemoAuctionEditor() {
       setMessage({ kind: "error", text: "Enter valid pricing details and 1 to 1000 winning bidders." });
       return;
     }
+    const imageEntry = new FormData(event.currentTarget).get("image");
+    const imageFile = imageEntry instanceof File && imageEntry.size > 0 ? imageEntry : null;
+    if (imageFile && (!PRODUCT_IMAGE_TYPES.includes(imageFile.type) || imageFile.size > DEMO_IMAGE_MAX_BYTES)) {
+      setMessage({ kind: "error", text: "Demo images must be PNG or JPEG files up to 1 MB." });
+      return;
+    }
+    let imageUrl = form.imageUrl;
+    if (imageFile) {
+      try {
+        imageUrl = await fileAsDataUrl(imageFile);
+      } catch {
+        setMessage({ kind: "error", text: "Could not read the selected image." });
+        return;
+      }
+    }
     const now = new Date().toISOString();
     const nextAuction: Auction = selected
       ? {
         ...selected,
         title: form.title.trim(),
         description: form.description.trim(),
-        image_url: form.imageUrl.trim() || null,
+        image_url: imageUrl || null,
         starting_price: startingPrice,
         minimum_increment: minimumIncrement,
         winner_count: winnerCount,
@@ -369,7 +390,7 @@ function DemoAuctionEditor() {
         id: crypto.randomUUID(),
         title: form.title.trim(),
         description: form.description.trim(),
-        image_url: form.imageUrl.trim() || null,
+        image_url: imageUrl || null,
         starting_price: startingPrice,
         minimum_increment: minimumIncrement,
         winner_count: winnerCount,
@@ -473,12 +494,25 @@ function AuctionManagerView({
   onFormChange: (form: FormState) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onSave: (event: FormEvent) => void;
+  onSave: (event: FormEvent<HTMLFormElement>) => void;
   onStatusChange: (action: "start" | "end") => void;
   onRefresh: () => void;
   onSignOut?: () => void;
   onReset?: () => void;
 }) {
+  const auctionKey = auction?.id ?? "new";
+  const [selectedImage, setSelectedImage] = useState<{ auctionKey: string; file: File } | null>(null);
+  const selectedImageFile = selectedImage?.auctionKey === auctionKey ? selectedImage.file : null;
+  const selectedImageUrl = useMemo(
+    () => selectedImageFile ? URL.createObjectURL(selectedImageFile) : null,
+    [selectedImageFile],
+  );
+  useEffect(() => () => {
+    if (selectedImageUrl) URL.revokeObjectURL(selectedImageUrl);
+  }, [selectedImageUrl]);
+  const imagePreviewUrl = selectedImageUrl ?? form.imageUrl;
+  const imageMaxBytes = demo ? DEMO_IMAGE_MAX_BYTES : PRODUCT_IMAGE_MAX_BYTES;
+
   const winningRanks = new Map(
     (auction ? selectWinningBids(bids, auction.winner_count) : [])
       .map((bid) => [bid.id, bid.rank]),
@@ -544,35 +578,65 @@ function AuctionManagerView({
             {auction && <span className="status-pill"><span className={`status-dot ${auction.status}`} />{auction.status}</span>}
           </div>
 
-          <form onSubmit={onSave} className="space-y-5">
+          <form key={auctionKey} onSubmit={onSave} className="space-y-5">
             <div>
               <label className="field-label" htmlFor="title">Product name</label>
-              <input id="title" className="field" value={form.title} onChange={(event) => updateField("title", event.target.value)} maxLength={120} required />
+              <input id="title" name="title" className="field" value={form.title} onChange={(event) => updateField("title", event.target.value)} maxLength={120} required />
             </div>
             <div>
               <label className="field-label" htmlFor="description">Description</label>
-              <textarea id="description" className="field min-h-32 resize-y" value={form.description} onChange={(event) => updateField("description", event.target.value)} maxLength={4000} />
+              <textarea id="description" name="description" className="field min-h-32 resize-y" value={form.description} onChange={(event) => updateField("description", event.target.value)} maxLength={4000} />
             </div>
             <div>
-              <label className="field-label" htmlFor="image">Product image URL</label>
-              <input id="image" type="url" className="field" value={form.imageUrl} onChange={(event) => updateField("imageUrl", event.target.value)} placeholder="https://…" />
+              <label className="field-label" htmlFor="image">Product image</label>
+              <input
+                key={auctionKey}
+                id="image"
+                name="image"
+                type="file"
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                className="field file:mr-4 file:rounded-full file:border-0 file:bg-forest file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  const error = file && !PRODUCT_IMAGE_TYPES.includes(file.type)
+                    ? "Select a PNG or JPEG image."
+                    : file && file.size > imageMaxBytes
+                      ? `The image must not exceed ${demo ? "1 MB" : "4 MB"}.`
+                      : "";
+                  event.target.setCustomValidity(error);
+                  if (error) {
+                    event.target.reportValidity();
+                    setSelectedImage(null);
+                    return;
+                  }
+                  setSelectedImage(file ? { auctionKey, file } : null);
+                }}
+              />
+              <p className="mt-2 text-xs text-ink/45">
+                PNG or JPEG, maximum {demo ? "1 MB in demo mode" : "4 MB"}. Choosing no file keeps the current image.
+              </p>
+              {imagePreviewUrl && (
+                <div className="mt-3 h-40 overflow-hidden rounded-2xl border border-ink/10 bg-mist">
+                  <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-cover" />
+                </div>
+              )}
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <label className="field-label" htmlFor="starting-price">Starting price</label>
-                <input id="starting-price" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} required />
+                <input id="starting-price" name="startingPrice" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="increment">Minimum step</label>
-                <input id="increment" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} required />
+                <input id="increment" name="minimumIncrement" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="winner-count">Winning bidders</label>
-                <input id="winner-count" type="number" min="1" max="1000" step="1" className="field" value={form.winnerCount} onChange={(event) => updateField("winnerCount", event.target.value)} required />
+                <input id="winner-count" name="winnerCount" type="number" min="1" max="1000" step="1" className="field" value={form.winnerCount} onChange={(event) => updateField("winnerCount", event.target.value)} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="currency">Currency</label>
-                <input id="currency" className="field uppercase" value={form.currency} onChange={(event) => updateField("currency", event.target.value.toUpperCase())} minLength={3} maxLength={3} required />
+                <input id="currency" name="currency" className="field uppercase" value={form.currency} onChange={(event) => updateField("currency", event.target.value.toUpperCase())} minLength={3} maxLength={3} required />
               </div>
             </div>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
