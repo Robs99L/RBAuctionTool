@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { selectCurrentAuction } from "@/lib/auction-queue";
+import { selectWinningBids } from "@/lib/auction-winners";
 import { minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
 import { formatMoney, formatTime } from "@/lib/format";
 import { continueParticipantAcrossLots } from "@/lib/participant-session";
@@ -582,6 +583,9 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
   const status = effectiveStatus(auction);
   const highest = bids[0];
   const minimum = minimumNextBid(auction.starting_price, auction.minimum_increment, highest?.amount);
+  const winningRanks = new Map(
+    selectWinningBids(bids, auction.winner_count).map((bid) => [bid.id, bid.rank]),
+  );
 
   async function submitBid(event: FormEvent) {
     event.preventDefault();
@@ -663,18 +667,28 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
             </div>
             {bids.length ? (
               <ol className="divide-y divide-ink/10">
-                {bids.map((bid, index) => (
-                  <li key={bid.id} className="grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-4 first:pt-1">
-                    <span className={`grid h-9 w-9 place-items-center rounded-full text-xs font-bold ${index === 0 ? "bg-lime" : "bg-ink/5"}`}>
-                      {bid.username.slice(0, 2).toUpperCase()}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">{bid.username}</p>
-                      <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
-                    </div>
-                    <strong className="tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
-                  </li>
-                ))}
+                {bids.map((bid) => {
+                  const winningRank = winningRanks.get(bid.id);
+                  return (
+                    <li key={bid.id} className="grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-4 first:pt-1">
+                      <span className={`grid h-9 w-9 place-items-center rounded-full text-xs font-bold ${winningRank ? "bg-lime" : "bg-ink/5"}`}>
+                        {bid.username.slice(0, 2).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="flex min-w-0 items-center gap-2 font-semibold">
+                          <span className="truncate">{bid.username}</span>
+                          {winningRank && (
+                            <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">
+                              Winner #{winningRank}
+                            </span>
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
+                      </div>
+                      <strong className="tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
+                    </li>
+                  );
+                })}
               </ol>
             ) : (
               <div className="rounded-2xl border border-dashed border-ink/15 px-5 py-10 text-center">
