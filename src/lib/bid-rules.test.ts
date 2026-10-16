@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { minimumNextBid, parseBidAmount } from "./bid-rules";
+import { maximumNextBid, minimumNextBid, parseBidAmount } from "./bid-rules";
 
 describe("bid rules", () => {
   it("calculates the first and subsequent minimum bids", () => {
@@ -11,6 +11,12 @@ describe("bid rules", () => {
   it("lets the leading participant raise their own bid by one cent", () => {
     expect(minimumNextBid(50, 2.5, 61, true)).toBe(61.01);
     expect(minimumNextBid(50, 2.5, null, true)).toBe(52.5);
+  });
+
+  it("calculates an optional maximum from the current highest bid", () => {
+    expect(maximumNextBid(50, 20, null)).toBe(70);
+    expect(maximumNextBid(50, 20, 61)).toBe(81);
+    expect(maximumNextBid(50, null, 61)).toBeNull();
   });
 
   it("accepts two-decimal currency input", () => {

@@ -6,8 +6,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuctionTimer } from "@/components/auction-timer";
 import { selectCurrentAuction } from "@/lib/auction-queue";
 import { selectWinningBids } from "@/lib/auction-winners";
-import { minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
+import { maximumNextBid, minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
 import { formatMoney, formatTime } from "@/lib/format";
+import { normalizeParticipantProfile } from "@/lib/participant-profile";
 import { continueParticipantAcrossLots } from "@/lib/participant-session";
 import {
   ensureAnonymousSupabaseSession,
@@ -34,6 +35,9 @@ function normalizeAuction(value: Record<string, unknown>): Auction {
     ...(value as unknown as Auction),
     starting_price: Number(value.starting_price),
     minimum_increment: Number(value.minimum_increment),
+    maximum_bid_difference: value.maximum_bid_difference == null
+      ? null
+      : Number(value.maximum_bid_difference),
     winner_count: Number(value.winner_count ?? 1),
     sort_order: Number(value.sort_order),
   };
@@ -116,22 +120,24 @@ export function AuctionApp() {
     setAuction(normalizeAuction(auctionResult.data));
   }, [auctionId, client]);
 
-  const joinAuction = useCallback(async (username: string) => {
+  const joinAuction = useCallback(async (username: string, email: string) => {
     if (!client || !auctionId) throw new Error("The auction is not available.");
     await ensureAnonymousSupabaseSession(client);
-    const { data, error: joinError } = await client.rpc("join_auction", {
+    const { data, error: joinError } = await client.rpc("join_auction_with_contact", {
       p_auction_id: auctionId,
       p_username: username,
+      p_email: email,
     });
     if (joinError) {
       const { data: existingData, error: existingError } = await client.rpc(
-        "get_my_participant",
+        "get_my_participant_with_contact",
         { p_auction_id: auctionId },
       );
       const existingParticipant = existingData?.[0] as Participant | undefined;
       if (
         !existingError &&
-        existingParticipant?.username.toLocaleLowerCase() === username.toLocaleLowerCase()
+        existingParticipant?.username.toLocaleLowerCase() === username.toLocaleLowerCase() &&
+        existingParticipant?.email?.toLocaleLowerCase() === email.toLocaleLowerCase()
       ) {
         return existingParticipant;
       }
@@ -204,26 +210,29 @@ export function AuctionApp() {
       try {
         const session = await getVerifiedSupabaseSession(client!);
         if (!session || !active) return;
-        const { data, error: restoreError } = await client!.rpc("get_my_participant", {
+        const { data, error: restoreError } = await client!.rpc("get_my_participant_with_contact", {
           p_auction_id: auctionId,
         });
         if (restoreError) throw restoreError;
         if (!active) return;
 
         const currentParticipant = data?.[0] ? data[0] as Participant : null;
-        let previousUsername: string | null = null;
-        if (!currentParticipant) {
+        let previousIdentity: { username: string; email: string } | null = null;
+        if (!currentParticipant?.email) {
           const { data: identityData, error: identityError } = await client!.rpc(
-            "get_my_auction_identity",
+            "get_my_auction_identity_with_contact",
           );
           if (identityError) throw identityError;
-          previousUsername = identityData?.[0]?.username ?? null;
+          const identity = identityData?.[0];
+          previousIdentity = identity?.username && identity?.email
+            ? { username: identity.username, email: identity.email }
+            : null;
         }
         if (!active) return;
 
         const restoredParticipant = await continueParticipantAcrossLots(
           currentParticipant,
-          previousUsername,
+          previousIdentity,
           joinAuction,
         );
         if (active) setParticipant(restoredParticipant);
@@ -340,7 +349,7 @@ function DemoAuctionApp() {
       setDemoState(next);
       const existingParticipant = next.participants.find((item) => item.id === participantId);
       setParticipant(
-        existingParticipant && currentAuction
+        existingParticipant?.email && currentAuction
           ? { ...existingParticipant, auction_id: currentAuction.id }
           : null,
       );
@@ -360,17 +369,18 @@ function DemoAuctionApp() {
     saveDemoAuctionState(next);
   }, []);
 
-  const joinDemo = useCallback(async (username: string) => {
+  const joinDemo = useCallback(async (username: string, email: string) => {
     if (!demoState || !demoAuction) throw new Error("The demo is still loading.");
     const nameTaken = demoState.participants.some(
       (item) => item.username.toLocaleLowerCase() === username.toLocaleLowerCase(),
     );
-    if (nameTaken) throw new Error("This display name is already in use.");
+    if (nameTaken) throw new Error("This name is already in use.");
 
     const nextParticipant: Participant = {
       id: crypto.randomUUID(),
       auction_id: demoAuction.id,
       username,
+      email,
       created_at: new Date().toISOString(),
     };
     commitState({
@@ -392,9 +402,19 @@ function DemoAuctionApp() {
       demoBids[0]?.amount,
       demoBids[0]?.participant_id === participant.id,
     );
+    const maximum = maximumNextBid(
+      demoAuction.starting_price,
+      demoAuction.maximum_bid_difference,
+      demoBids[0]?.amount,
+    );
     if (amount < minimum) {
       throw new Error(
         `Your bid must be at least ${formatMoney(minimum, demoAuction.currency)}.`,
+      );
+    }
+    if (maximum !== null && amount > maximum) {
+      throw new Error(
+        `Your bid must not exceed ${formatMoney(maximum, demoAuction.currency)}.`,
       );
     }
 
@@ -482,25 +502,26 @@ function Header({
 function JoinExperience({ auction, onJoined, onJoin }: {
   auction: Auction;
   onJoined: (participant: Participant) => void;
-  onJoin: (username: string) => Promise<Participant>;
+  onJoin: (username: string, email: string) => Promise<Participant>;
 }) {
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const status = effectiveStatus(auction);
 
   async function join(event: FormEvent) {
     event.preventDefault();
-    const cleanUsername = username.trim();
-    if (!cleanUsername || cleanUsername.length > 32) {
-      setMessage("Enter a username between 1 and 32 characters.");
+    const profile = normalizeParticipantProfile(username, email);
+    if (!profile) {
+      setMessage("Enter your full name and a valid email address.");
       return;
     }
 
     setSubmitting(true);
     setMessage("");
     try {
-      onJoined(await onJoin(cleanUsername));
+      onJoined(await onJoin(profile.username, profile.email));
     } catch (joinError) {
       setMessage(joinError instanceof Error ? joinError.message : "Could not join the auction.");
     } finally {
@@ -532,7 +553,7 @@ function JoinExperience({ auction, onJoined, onJoin }: {
           <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-forest">You’re invited</p>
           <h2 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Join the bidding.</h2>
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
-            Choose your display name once. You stay in the auction automatically when the next product starts.
+            Enter your name and email once. You stay in the auction automatically when the next product starts.
           </p>
           <AuctionTimer
             startsAt={auction.starts_at}
@@ -540,35 +561,55 @@ function JoinExperience({ auction, onJoined, onJoin }: {
             compact
             className="mt-6"
           />
-          <form className="mt-9" onSubmit={join}>
-            <label className="field-label" htmlFor="username">Display name</label>
-            <div className="flex flex-col gap-3 sm:flex-row">
+          <form className="mt-9 space-y-4" onSubmit={join}>
+            <div>
+              <label className="field-label" htmlFor="username">Full name</label>
               <input
                 id="username"
-                className="field min-h-12 flex-1"
+                name="name"
+                className="field min-h-12"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                placeholder="e.g. Mia K."
-                maxLength={32}
-                autoComplete="nickname"
+                placeholder="e.g. Mia Keller"
+                maxLength={120}
+                autoComplete="name"
                 autoFocus
                 disabled={status === "ended"}
+                required
               />
-              <button className="btn-primary min-w-32" disabled={submitting || status === "ended"}>
-                {submitting ? "Joining…" : "Join auction"}
-              </button>
             </div>
+            <div>
+              <label className="field-label" htmlFor="email">Email address</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                className="field min-h-12"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="mia@example.com"
+                maxLength={254}
+                autoComplete="email"
+                disabled={status === "ended"}
+                required
+              />
+            </div>
+            <button className="btn-primary w-full" disabled={submitting || status === "ended"}>
+              {submitting ? "Joining…" : "Join auction"}
+            </button>
             {message && <div className="notice notice-error mt-3" role="alert">{message}</div>}
           </form>
           {status === "ended" && (
             <div className="notice notice-info mt-5">This auction has ended and is no longer accepting participants.</div>
           )}
           <p className="mt-6 text-xs leading-5 text-ink/45">
-            Display names are public and are not verified identities. Your anonymous session is saved in this browser.
+            Your name is shown with bids. Your email stays private and is available only to auction administrators.
+            Every accepted bid contributes to the donation total for this product.
           </p>
           <div className="mt-9 flex items-center gap-6 border-t border-ink/10 pt-6 text-sm">
             <div><span className="block text-ink/45">Opening price</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
             <div><span className="block text-ink/45">Minimum step</span><strong className="mt-1 block">{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
+            <div><span className="block text-ink/45">Maximum increase</span><strong className="mt-1 block">{auction.maximum_bid_difference == null ? "Unlimited" : formatMoney(auction.maximum_bid_difference, auction.currency)}</strong></div>
             <div><span className="block text-ink/45">Winning bidders</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
           </div>
         </div>
@@ -597,6 +638,11 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
     highest?.amount,
     isLeadingParticipant,
   );
+  const maximum = maximumNextBid(
+    auction.starting_price,
+    auction.maximum_bid_difference,
+    highest?.amount,
+  );
   const winningRanks = new Map(
     selectWinningBids(bids, auction.winner_count).map((bid) => [bid.id, bid.rank]),
   );
@@ -611,6 +657,10 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
     }
     if (parsed < minimum) {
       setFeedback({ kind: "error", text: `Your bid must be at least ${formatMoney(minimum, auction.currency)}.` });
+      return;
+    }
+    if (maximum !== null && parsed > maximum) {
+      setFeedback({ kind: "error", text: `Your bid must not exceed ${formatMoney(maximum, auction.currency)}.` });
       return;
     }
 
@@ -670,6 +720,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                 <div className="mt-8 flex flex-wrap gap-8 border-t border-ink/10 pt-5 text-sm">
                   <div><span className="block text-ink/45">Opening</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                   <div><span className="block text-ink/45">Bid step</span><strong className="mt-1 block">+{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
+                  <div><span className="block text-ink/45">Max. increase</span><strong className="mt-1 block">{auction.maximum_bid_difference == null ? "Unlimited" : `+${formatMoney(auction.maximum_bid_difference, auction.currency)}`}</strong></div>
                   <div><span className="block text-ink/45">Winner spots</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
                 </div>
               </div>
@@ -740,7 +791,12 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   <span className="block text-xs font-bold uppercase tracking-[.13em] text-ink/45">Bidding as</span>
                   <strong className="mt-1 block">{participant.username}</strong>
                 </div>
-                <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Min. {formatMoney(minimum, auction.currency)}</span>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Min. {formatMoney(minimum, auction.currency)}</span>
+                  {maximum !== null && (
+                    <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Max. {formatMoney(maximum, auction.currency)}</span>
+                  )}
+                </div>
               </div>
               <label className="field-label" htmlFor="bid-amount">Your bid</label>
               <div className="relative">
@@ -758,8 +814,9 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
               </div>
               <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
                 {isLeadingParticipant
-                  ? "You are leading and can raise your own bid by any amount."
-                  : "The database rechecks the amount when submitted."}
+                  ? `You are leading and can raise your own bid${maximum === null ? " by any amount" : " up to the configured maximum"}.`
+                  : "The database rechecks the minimum and maximum when submitted."}
+                {" Every accepted bid is added to this product's donation total."}
               </p>
               <button className="btn-primary mt-5 w-full" disabled={status !== "active" || submitting}>
                 {submitting ? "Checking bid…" : status === "active" ? "Place bid" : status === "ended" ? "Auction ended" : "Auction not started"}
@@ -772,7 +829,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
         </aside>
       </div>
       <footer className="flex flex-col gap-3 py-8 text-xs text-ink/40 sm:flex-row sm:items-center sm:justify-between">
-        <span>Usernames are unverified display names.</span>
+        <span>Names are self-reported; email addresses remain private.</span>
         <Link href="/admin" className="text-link">Auction administration</Link>
       </footer>
     </div>

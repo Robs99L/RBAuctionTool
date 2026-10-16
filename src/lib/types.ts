@@ -7,6 +7,7 @@ export type Auction = {
   image_url: string | null;
   starting_price: number;
   minimum_increment: number;
+  maximum_bid_difference: number | null;
   winner_count: number;
   currency: string;
   status: AuctionStatus;
@@ -20,6 +21,7 @@ export type Participant = {
   id: string;
   auction_id: string;
   username: string;
+  email: string | null;
   created_at: string;
 };
 

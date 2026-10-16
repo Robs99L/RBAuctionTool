@@ -69,12 +69,16 @@ export async function GET(request: Request) {
   if (!(await isAdminRequest())) return unauthorized();
   try {
     const client = getSupabaseAdminClient();
-    const { data, error } = await client
-      .from("auctions")
-      .select("*")
-      .order("sort_order", { ascending: true });
-    if (error) throw error;
-    const auctions = data ?? [];
+    const [auctionResult, donationResult] = await Promise.all([
+      client
+        .from("auctions")
+        .select("*")
+        .order("sort_order", { ascending: true }),
+      client.rpc("get_auction_donation_totals"),
+    ]);
+    if (auctionResult.error) throw auctionResult.error;
+    if (donationResult.error) throw donationResult.error;
+    const auctions = auctionResult.data ?? [];
     const requestedId = new URL(request.url).searchParams.get("auctionId");
     const selected =
       auctions.find((auction) => auction.id === requestedId) ??
@@ -84,15 +88,18 @@ export async function GET(request: Request) {
       null;
     let bids: unknown[] = [];
     if (selected) {
-      const result = await client
-        .from("bids")
-        .select("id, participant_id, amount, created_at, participants(username)")
-        .eq("auction_id", selected.id)
-        .order("created_at", { ascending: false });
+      const result = await client.rpc("get_auction_admin_bids", {
+        p_auction_id: selected.id,
+      });
       if (result.error) throw result.error;
       bids = result.data ?? [];
     }
-    return NextResponse.json({ auctions, auction: selected, bids });
+    return NextResponse.json({
+      auctions,
+      auction: selected,
+      bids,
+      donationTotals: donationResult.data ?? [],
+    });
   } catch (error) {
     return configurationError(error);
   }
@@ -108,6 +115,10 @@ export async function PUT(request: Request) {
   const description = formValue(formData, "description").trim().slice(0, 4000);
   const startingPrice = Number(formValue(formData, "startingPrice"));
   const minimumIncrement = Number(formValue(formData, "minimumIncrement"));
+  const maximumDifferenceValue = formValue(formData, "maximumDifference").trim();
+  const maximumDifference = maximumDifferenceValue === ""
+    ? null
+    : Number(maximumDifferenceValue);
   const winnerCount = Number(formValue(formData, "winnerCount"));
   const currency = formValue(formData, "currency").trim().toUpperCase();
   const imageEntry = formData.get("image");
@@ -120,12 +131,20 @@ export async function PUT(request: Request) {
     startingPrice < 0 ||
     !Number.isFinite(minimumIncrement) ||
     minimumIncrement <= 0 ||
+    (maximumDifference !== null && (
+      !Number.isFinite(maximumDifference) ||
+      maximumDifference < minimumIncrement ||
+      maximumDifference > 9999999999.99 ||
+      Math.round(maximumDifference * 100) / 100 !== maximumDifference
+    )) ||
     !Number.isSafeInteger(winnerCount) ||
     winnerCount < 1 ||
     winnerCount > 1000 ||
     !/^[A-Z]{3}$/.test(currency)
   ) {
-    return NextResponse.json({ error: "Check the title, prices, winner count, and currency." }, { status: 400 });
+    return NextResponse.json({
+      error: "Check the title, prices, maximum increase, winner count, and currency.",
+    }, { status: 400 });
   }
 
   if (imageFile && imageFile.size > PRODUCT_IMAGE_MAX_BYTES) {
@@ -178,6 +197,7 @@ export async function PUT(request: Request) {
       image_url: imageUrl,
       starting_price: startingPrice,
       minimum_increment: minimumIncrement,
+      maximum_bid_difference: maximumDifference,
       winner_count: winnerCount,
       currency,
     };

@@ -17,18 +17,21 @@ export function createDemoAuctionState(): DemoAuctionState {
       id: "demo-participant-mia",
       auction_id: auctionId,
       username: "Mia K.",
+      email: "mia@example.com",
       created_at: new Date(now - 24 * 60 * 1000).toISOString(),
     },
     {
       id: "demo-participant-jonas",
       auction_id: auctionId,
       username: "Jonas R.",
+      email: "jonas@example.com",
       created_at: new Date(now - 19 * 60 * 1000).toISOString(),
     },
     {
       id: "demo-participant-lea",
       auction_id: auctionId,
       username: "Lea S.",
+      email: "lea@example.com",
       created_at: new Date(now - 13 * 60 * 1000).toISOString(),
     },
   ];
@@ -43,6 +46,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         image_url: null,
         starting_price: 550,
         minimum_increment: 25,
+        maximum_bid_difference: 100,
         winner_count: 1,
         currency: "EUR",
         status: "active",
@@ -59,6 +63,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         image_url: null,
         starting_price: 280,
         minimum_increment: 20,
+        maximum_bid_difference: 100,
         winner_count: 5,
         currency: "EUR",
         status: "upcoming",
@@ -75,6 +80,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         image_url: null,
         starting_price: 180,
         minimum_increment: 10,
+        maximum_bid_difference: 50,
         winner_count: 1,
         currency: "EUR",
         status: "upcoming",
@@ -128,7 +134,14 @@ export function loadDemoAuctionState() {
         ...parsed,
         auctions: parsed.auctions.map((auction) => ({
           ...auction,
+          maximum_bid_difference: auction.maximum_bid_difference == null
+            ? null
+            : Number(auction.maximum_bid_difference),
           winner_count: Number(auction.winner_count ?? 1),
+        })),
+        participants: parsed.participants.map((participant) => ({
+          ...participant,
+          email: typeof participant.email === "string" ? participant.email : null,
         })),
       } as DemoAuctionState;
     }

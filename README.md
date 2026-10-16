@@ -1,6 +1,6 @@
 # RBAuctionTool
 
-A responsive live-auction application built with Next.js, TypeScript, Tailwind CSS, Supabase PostgreSQL/Auth/Realtime, and Netlify. Participants join with an unverified display name, submit bids through an atomic database function, and receive accepted bids over a Supabase Realtime channel. A separate server-protected page manages an ordered queue of auction products.
+A responsive live-auction application built with Next.js, TypeScript, Tailwind CSS, Supabase PostgreSQL/Auth/Realtime, and Netlify. Participants join with their name and email address, submit bids through an atomic database function, and receive accepted bids over a Supabase Realtime channel. A separate server-protected page manages an ordered queue of auction products and shows the donation total from every accepted bid per product.
 
 ## What is included
 
@@ -48,7 +48,7 @@ supabase db seed  # optional preview data
 
 Alternatively, paste each migration into **SQL Editor** and run them in filename order. The migrations create the tables, queue order, constraints, RLS policies, RPC functions, grants, indexes, and Realtime publication entries. No additional Realtime policy step is required. In **Database → Pipelines**, verify `auctions`, `bids`, and `participants` appear in the `supabase_realtime` publication.
 
-The migration grants public read access only to auction display data, public participant fields, and accepted bids. Browser roles cannot insert/update/delete those tables directly. `join_auction`, `get_my_participant`, `get_my_auction_identity`, and `place_bid` are the only participant RPCs, and they are available only to authenticated users. After joining once, the browser reuses the verified anonymous session and display name to enter each following product lot automatically.
+The migration grants public read access only to auction display data, participant names, and accepted bids. Email addresses live in a private schema and are available only through service-role admin reporting. Browser roles cannot insert/update/delete auction data directly. `join_auction_with_contact`, `get_my_participant_with_contact`, `get_my_auction_identity_with_contact`, and `place_bid` are the participant RPCs used by the current client, and they are available only to authenticated users. After joining once, the browser reuses the verified anonymous session, name, and email to enter each following product lot automatically.
 
 ## Environment variables
 
@@ -67,19 +67,21 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 
 1. Start the app and visit `/admin`.
 2. Enter the value configured as `ADMIN_SECRET`. A secure, HTTP-only, same-site cookie is issued for eight hours.
-3. Enter the product name, description, optional PNG/JPEG image (up to 4 MB), starting price, minimum increment, number of winning bidders, and three-letter currency code, then add the product to the queue. Repeat this for every product. The server creates a public `product-images` Supabase Storage bucket on the first upload; browser clients never receive the server key or direct upload permission. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
+3. Enter the product name, description, optional PNG/JPEG image (up to 4 MB), starting price, minimum increment, optional maximum increase, number of winning bidders, and three-letter currency code, then add the product to the queue. The maximum increase limits how far one bid may jump above the current highest bid; leave it blank for no limit. Repeat this for every product. The server creates a public `product-images` Supabase Storage bucket on the first upload; browser clients never receive the server key or direct upload permission. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
 4. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot. Choose **End bidding** to close it. These actions are checked again by the server route; hiding or showing the controls is not the authorization boundary.
 
-The first acceptable bid is `starting price + minimum increment`. Every later bid must be at least `current highest bid + minimum increment`.
+The admin product cards and bid history show a donation total calculated in PostgreSQL. It is the sum of every accepted bid for that product, including repeated increases by the same participant. Participant emails are visible only in the protected admin bid history.
+
+The first acceptable bid is `starting price + minimum increment`. Every later bid from a participant who is not leading must be at least `current highest bid + minimum increment`; the current leader may raise their own bid by one cent or more. If a maximum increase is configured, no bid may exceed `current highest bid + maximum increase` (or `starting price + maximum increase` for the first bid).
 The visible timer counts down from two minutes using the product's server-recorded start time. Reaching `00:00` does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**.
 
 ## Test two participants
 
 1. Start the auction from `/admin`.
-2. Open `/` in a normal browser window and join with one display name.
-3. Open `/` in a private/incognito window and join with a different display name. A separate browser profile is needed because an anonymous Auth session can have only one participant identity per auction.
+2. Open `/` in a normal browser window and join with one name and email address.
+3. Open `/` in a private/incognito window and join with a different name and email address. A separate browser profile is needed because an anonymous Auth session can have only one participant identity per auction.
 4. Place a valid bid in one window. The other window should update without a refresh and show the new amount, participant, and server timestamp.
-5. Try the same display name in another window, a value below the shown minimum, rapid double-clicks, and a bid after ending the auction. Each should be rejected or deduplicated safely.
+5. Try the same name in another window, a value below the shown minimum, rapid double-clicks, and a bid after ending the auction. Each should be rejected or deduplicated safely.
 
 The auction row is locked inside `place_bid`, so two simultaneous calls are serialized. The second transaction sees the first accepted amount and must meet the newly calculated minimum.
 
@@ -106,6 +108,6 @@ For Supabase Auth, add the final Netlify domain under **Authentication → URL C
 
 This is an MVP, not a real-money auction platform. Before accepting valuable or regulated bids, add verified user accounts, legal terms and consent, abuse/rate limiting, bot protection, audit-log retention, administrator roles with MFA, monitoring and alerting, backups/recovery tests, and integration tests against a staging database. Add an explicit confirmation step and auction-specific bid/cancellation rules where required by law.
 
-Anonymous Auth binds actions to a browser session, but a participant can clear storage or use another browser to obtain another identity. Display names remain unverified. The admin secret is a shared credential; rotate it if exposed and replace it with individual administrator accounts and role claims for multi-admin use. The service-role key is confined to server routes, but those routes should receive platform-level rate limiting before public launch.
+Anonymous Auth binds actions to a browser session, but a participant can clear storage or use another browser to obtain another identity. Names and email addresses are self-reported and are not verified. The admin secret is a shared credential; rotate it if exposed and replace it with individual administrator accounts and role claims for multi-admin use. The service-role key is confined to server routes, but those routes should receive platform-level rate limiting before public launch.
 
 The app manages an ordered product queue with exactly one active lot at a time. Supporting simultaneous auction rooms requires auction-specific routes and room selection. Automatic scheduled transitions are not included; start/end are admin actions, while the bid function still enforces any configured time bounds. Money uses two-decimal `numeric` values and a configurable ISO currency code; it does not handle currencies with unusual minor units.

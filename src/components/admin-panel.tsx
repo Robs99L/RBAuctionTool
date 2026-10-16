@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuctionTimer } from "@/components/auction-timer";
 import { orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
 import { selectWinningBids } from "@/lib/auction-winners";
+import { summarizeDonations, type DonationTotal } from "@/lib/donation-summary";
 import {
   clearDemoParticipantId,
   createDemoAuctionState,
@@ -22,6 +23,7 @@ type AdminBid = {
   amount: number;
   created_at: string;
   username: string;
+  email: string;
 };
 
 type FormState = {
@@ -30,6 +32,7 @@ type FormState = {
   imageUrl: string;
   startingPrice: string;
   minimumIncrement: string;
+  maximumDifference: string;
   winnerCount: string;
   currency: string;
 };
@@ -46,6 +49,7 @@ const emptyForm: FormState = {
   imageUrl: "",
   startingPrice: "0",
   minimumIncrement: "1",
+  maximumDifference: "",
   winnerCount: "1",
   currency: "EUR",
 };
@@ -57,6 +61,9 @@ function formFromAuction(auction: Auction): FormState {
     imageUrl: auction.image_url ?? "",
     startingPrice: String(auction.starting_price),
     minimumIncrement: String(auction.minimum_increment),
+    maximumDifference: auction.maximum_bid_difference == null
+      ? ""
+      : String(auction.maximum_bid_difference),
     winnerCount: String(auction.winner_count),
     currency: auction.currency,
   };
@@ -67,14 +74,12 @@ function normalizedAuction(auction: Auction): Auction {
     ...auction,
     starting_price: Number(auction.starting_price),
     minimum_increment: Number(auction.minimum_increment),
+    maximum_bid_difference: auction.maximum_bid_difference == null
+      ? null
+      : Number(auction.maximum_bid_difference),
     winner_count: Number(auction.winner_count ?? 1),
     sort_order: Number(auction.sort_order),
   };
-}
-
-function extractParticipant(value: unknown) {
-  if (Array.isArray(value)) return (value[0] as { username?: string } | undefined)?.username;
-  return (value as { username?: string } | null)?.username;
 }
 
 function mapAdminBids(rows: Array<Record<string, unknown>> = []): AdminBid[] {
@@ -83,7 +88,19 @@ function mapAdminBids(rows: Array<Record<string, unknown>> = []): AdminBid[] {
     participant_id: String(bid.participant_id),
     amount: Number(bid.amount),
     created_at: String(bid.created_at),
-    username: extractParticipant(bid.participants) ?? String(bid.username ?? "Unknown participant"),
+    username: String(bid.username ?? "Unknown participant"),
+    email: String(bid.email ?? ""),
+  }));
+}
+
+function mapDonationTotals(rows: Array<Record<string, unknown>> = []): DonationTotal[] {
+  return rows.map((row) => ({
+    auction_id: String(row.auction_id),
+    title: String(row.title),
+    currency: String(row.currency),
+    sort_order: Number(row.sort_order),
+    bid_count: Number(row.bid_count),
+    total_bid_amount: Number(row.total_bid_amount),
   }));
 }
 
@@ -180,6 +197,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [auction, setAuction] = useState<Auction | null>(null);
   const [bids, setBids] = useState<AdminBid[]>([]);
+  const [donationTotals, setDonationTotals] = useState<DonationTotal[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -193,6 +211,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         auctions?: Auction[];
         auction?: Auction | null;
         bids?: Array<Record<string, unknown>>;
+        donationTotals?: Array<Record<string, unknown>>;
         error?: string;
       };
       if (response.status === 401) {
@@ -206,6 +225,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       setAuction(selected);
       setForm(selected ? formFromAuction(selected) : emptyForm);
       setBids(mapAdminBids(data.bids));
+      setDonationTotals(mapDonationTotals(data.donationTotals));
     } catch (loadError) {
       setMessage({
         kind: "error",
@@ -277,6 +297,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       auctions={auctions}
       auction={auction}
       bids={bids}
+      donationTotals={donationTotals}
       form={form}
       message={message}
       saving={saving}
@@ -310,9 +331,16 @@ function DemoAuctionEditor() {
     () => selected && demoState
       ? demoState.bids
         .filter((bid) => bid.auction_id === selected.id)
-        .map((bid) => ({ ...bid }))
+        .map((bid) => ({
+          ...bid,
+          email: demoState.participants.find((participant) => participant.id === bid.participant_id)?.email ?? "",
+        }))
       : [],
     [demoState, selected],
+  );
+  const donationTotals = useMemo(
+    () => demoState ? summarizeDonations(demoState.auctions, demoState.bids) : [],
+    [demoState],
   );
 
   const load = useCallback((preferredId?: string) => {
@@ -347,17 +375,27 @@ function DemoAuctionEditor() {
     setMessage(null);
     const startingPrice = Number(form.startingPrice);
     const minimumIncrement = Number(form.minimumIncrement);
+    const maximumDifference = form.maximumDifference.trim() === ""
+      ? null
+      : Number(form.maximumDifference);
     const winnerCount = Number(form.winnerCount);
     if (
       !Number.isFinite(startingPrice) ||
       startingPrice < 0 ||
       !Number.isFinite(minimumIncrement) ||
       minimumIncrement <= 0 ||
+      (maximumDifference !== null && (
+        !Number.isFinite(maximumDifference) ||
+        maximumDifference < minimumIncrement
+      )) ||
       !Number.isSafeInteger(winnerCount) ||
       winnerCount < 1 ||
       winnerCount > 1000
     ) {
-      setMessage({ kind: "error", text: "Enter valid pricing details and 1 to 1000 winning bidders." });
+      setMessage({
+        kind: "error",
+        text: "Enter valid pricing details. The optional maximum increase must be at least the minimum step.",
+      });
       return;
     }
     const imageEntry = new FormData(event.currentTarget).get("image");
@@ -384,6 +422,7 @@ function DemoAuctionEditor() {
         image_url: imageUrl || null,
         starting_price: startingPrice,
         minimum_increment: minimumIncrement,
+        maximum_bid_difference: maximumDifference,
         winner_count: winnerCount,
         currency: form.currency.trim().toUpperCase(),
       }
@@ -394,6 +433,7 @@ function DemoAuctionEditor() {
         image_url: imageUrl || null,
         starting_price: startingPrice,
         minimum_increment: minimumIncrement,
+        maximum_bid_difference: maximumDifference,
         winner_count: winnerCount,
         currency: form.currency.trim().toUpperCase(),
         status: "upcoming",
@@ -444,6 +484,7 @@ function DemoAuctionEditor() {
       auctions={orderAuctions(demoState.auctions)}
       auction={selected}
       bids={bids}
+      donationTotals={donationTotals}
       form={form}
       message={message}
       saving={false}
@@ -472,6 +513,7 @@ function AuctionManagerView({
   auctions,
   auction,
   bids,
+  donationTotals,
   form,
   message,
   saving,
@@ -488,6 +530,7 @@ function AuctionManagerView({
   auctions: Auction[];
   auction: Auction | null;
   bids: AdminBid[];
+  donationTotals: DonationTotal[];
   form: FormState;
   message: Message;
   saving: boolean;
@@ -513,6 +556,10 @@ function AuctionManagerView({
   }, [selectedImageUrl]);
   const imagePreviewUrl = selectedImageUrl ?? form.imageUrl;
   const imageMaxBytes = demo ? DEMO_IMAGE_MAX_BYTES : PRODUCT_IMAGE_MAX_BYTES;
+  const donationTotalsByAuction = new Map(
+    donationTotals.map((total) => [total.auction_id, total]),
+  );
+  const selectedDonationTotal = auction ? donationTotalsByAuction.get(auction.id) : undefined;
 
   const winningRanks = new Map(
     (auction ? selectWinningBids(bids, auction.winner_count) : [])
@@ -557,6 +604,9 @@ function AuctionManagerView({
                 <strong className="mt-2 block truncate">{item.title}</strong>
                 <span className={`mt-1 block text-xs ${auction?.id === item.id ? "text-white/60" : "text-ink/45"}`}>
                   {item.winner_count} {item.winner_count === 1 ? "winner" : "winners"}
+                </span>
+                <span className={`mt-1 block text-xs ${auction?.id === item.id ? "text-white/75" : "text-forest"}`}>
+                  Donation total: {formatMoney(donationTotalsByAuction.get(item.id)?.total_bid_amount ?? 0, item.currency)}
                 </span>
                 <span className={`mt-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.08em] ${auction?.id === item.id ? "text-white/75" : "text-ink/55"}`}>
                   <span className={`status-dot ${item.status}`} />{item.status}
@@ -631,7 +681,7 @@ function AuctionManagerView({
                 </div>
               )}
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <div>
                 <label className="field-label" htmlFor="starting-price">Starting price</label>
                 <input id="starting-price" name="startingPrice" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} required />
@@ -639,6 +689,20 @@ function AuctionManagerView({
               <div>
                 <label className="field-label" htmlFor="increment">Minimum step</label>
                 <input id="increment" name="minimumIncrement" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} required />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="maximum-difference">Maximum increase</label>
+                <input
+                  id="maximum-difference"
+                  name="maximumDifference"
+                  type="number"
+                  min={form.minimumIncrement || "0.01"}
+                  step="0.01"
+                  className="field"
+                  value={form.maximumDifference}
+                  onChange={(event) => updateField("maximumDifference", event.target.value)}
+                  placeholder="Unlimited"
+                />
               </div>
               <div>
                 <label className="field-label" htmlFor="winner-count">Winning bidders</label>
@@ -649,6 +713,9 @@ function AuctionManagerView({
                 <input id="currency" name="currency" className="field uppercase" value={form.currency} onChange={(event) => updateField("currency", event.target.value.toUpperCase())} minLength={3} maxLength={3} required />
               </div>
             </div>
+            <p className="text-xs leading-5 text-ink/45">
+              Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit.
+            </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
             <div className="flex flex-wrap items-center gap-3 border-t border-ink/10 pt-6">
               <button className="btn-primary" disabled={saving}>{saving ? "Saving…" : auction ? "Save changes" : "Add to queue"}</button>
@@ -668,9 +735,12 @@ function AuctionManagerView({
               <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected product</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid history</h2>
               {auction && (
-                <p className="mt-1 text-xs text-ink/45">
-                  Top {auction.winner_count} distinct {auction.winner_count === 1 ? "bidder wins" : "bidders win"}
-                </p>
+                <div className="mt-1 space-y-1 text-xs text-ink/45">
+                  <p>Top {auction.winner_count} distinct {auction.winner_count === 1 ? "bidder wins" : "bidders win"}</p>
+                  <p className="font-semibold text-forest">
+                    Donation total: {formatMoney(selectedDonationTotal?.total_bid_amount ?? 0, auction.currency)} from {selectedDonationTotal?.bid_count ?? 0} accepted bids
+                  </p>
+                </div>
               )}
             </div>
             <button className="text-link" onClick={onRefresh}>Refresh</button>
@@ -687,6 +757,7 @@ function AuctionManagerView({
                       {winningRank && <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
                     </p>
                     <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
+                    {bid.email && <p className="mt-0.5 truncate text-xs text-ink/45">{bid.email}</p>}
                   </div>
                   <strong className="text-sm tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
                 </li>

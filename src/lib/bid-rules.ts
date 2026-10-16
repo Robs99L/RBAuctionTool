@@ -11,6 +11,15 @@ export function minimumNextBid(
   return roundCurrency(base + increment);
 }
 
+export function maximumNextBid(
+  startingPrice: number,
+  maximumBidDifference: number | null,
+  highestBid?: number | null,
+) {
+  if (maximumBidDifference === null) return null;
+  return roundCurrency((highestBid ?? startingPrice) + maximumBidDifference);
+}
+
 export function parseBidAmount(value: string) {
   if (!/^\d+(?:[.,]\d{1,2})?$/.test(value.trim())) return null;
   const amount = Number(value.replace(",", "."));

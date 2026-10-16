@@ -5,6 +5,7 @@ insert into public.auctions (
   image_url,
   starting_price,
   minimum_increment,
+  maximum_bid_difference,
   winner_count,
   currency,
   status
@@ -15,6 +16,7 @@ insert into public.auctions (
     'https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=1400&q=85',
     80,
     5,
+    50,
     1,
     'EUR',
     'upcoming'
@@ -25,6 +27,7 @@ insert into public.auctions (
     null,
     280,
     20,
+    100,
     5,
     'EUR',
     'upcoming'
@@ -35,6 +38,7 @@ insert into public.auctions (
     null,
     180,
     10,
+    50,
     1,
     'EUR',
     'upcoming'
