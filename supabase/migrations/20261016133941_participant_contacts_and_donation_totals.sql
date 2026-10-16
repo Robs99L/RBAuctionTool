@@ -221,7 +221,7 @@ returns table (
   auction_id uuid,
   title text,
   currency text,
-  sort_order integer,
+  sort_order bigint,
   bid_count bigint,
   total_bid_amount numeric
 )

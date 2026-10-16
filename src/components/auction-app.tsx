@@ -493,6 +493,9 @@ function Header({
             <span className={`status-dot ${connection === "live" ? "active" : ""}`} />
             {connection === "live" ? "Live" : connection === "connecting" ? "Connecting" : "Reconnecting"}
           </span>
+          <Link href="/admin" className="text-link whitespace-nowrap">
+            Admin
+          </Link>
         </div>
       </div>
     </header>
@@ -553,7 +556,7 @@ function JoinExperience({ auction, onJoined, onJoin }: {
           <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-forest">You’re invited</p>
           <h2 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Join the bidding.</h2>
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
-            Enter your name and email once. You stay in the auction automatically when the next product starts.
+            Register at any time with your name and email. You stay in the auction automatically when the next product starts.
           </p>
           <AuctionTimer
             startsAt={auction.starts_at}
@@ -574,7 +577,6 @@ function JoinExperience({ auction, onJoined, onJoin }: {
                 maxLength={120}
                 autoComplete="name"
                 autoFocus
-                disabled={status === "ended"}
                 required
               />
             </div>
@@ -590,17 +592,16 @@ function JoinExperience({ auction, onJoined, onJoin }: {
                 placeholder="mia@example.com"
                 maxLength={254}
                 autoComplete="email"
-                disabled={status === "ended"}
                 required
               />
             </div>
-            <button className="btn-primary w-full" disabled={submitting || status === "ended"}>
-              {submitting ? "Joining…" : "Join auction"}
+            <button className="btn-primary w-full" disabled={submitting}>
+              {submitting ? "Joining…" : "Register for auction"}
             </button>
             {message && <div className="notice notice-error mt-3" role="alert">{message}</div>}
           </form>
           {status === "ended" && (
-            <div className="notice notice-info mt-5">This auction has ended and is no longer accepting participants.</div>
+            <div className="notice notice-info mt-5">Bidding for this product has ended, but registration remains open.</div>
           )}
           <p className="mt-6 text-xs leading-5 text-ink/45">
             Your name is shown with bids. Your email stays private and is available only to auction administrators.
