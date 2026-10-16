@@ -675,8 +675,8 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,.85fr)]">
         <div className="space-y-6">
           <section className="panel overflow-hidden">
-            <div className="grid md:grid-cols-[.9fr_1.1fr]">
-              <div className="relative min-h-72 bg-ink">
+            <div>
+              <div className="relative aspect-video w-full bg-ink">
                 {auction.image_url ? (
                   <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-contain" />
                 ) : (

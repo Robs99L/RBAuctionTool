@@ -684,10 +684,10 @@ function AuctionManagerView({
                 }}
               />
               <p className="mt-2 text-xs text-ink/45">
-                PNG or JPEG, maximum {demo ? "1 MB in demo mode" : "4 MB"}. Choosing no file keeps the current image.
+                PNG or JPEG, maximum {demo ? "1 MB in demo mode" : "4 MB"}. 16:9 is recommended, for example an exported PowerPoint slide. Choosing no file keeps the current image.
               </p>
               {imagePreviewUrl && (
-                <div className="mt-3 h-40 overflow-hidden rounded-2xl border border-ink/10 bg-mist">
+                <div className="mt-3 aspect-video w-full max-w-2xl overflow-hidden rounded-2xl border border-ink/10 bg-mist">
                   <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-contain" />
                 </div>
               )}
