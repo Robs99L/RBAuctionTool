@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png";
 import { AuctionTimer } from "@/components/auction-timer";
 import { selectCurrentAuction } from "@/lib/auction-queue";
 import { selectWinningBids } from "@/lib/auction-winners";
@@ -317,7 +319,7 @@ export function AuctionApp() {
           refreshDashboard={refreshDashboard}
         />
       ) : (
-        <JoinExperience auction={auction} onJoined={setParticipant} onJoin={joinAuction} />
+        <JoinExperience onJoined={setParticipant} onJoin={joinAuction} />
       )}
     </main>
   );
@@ -462,7 +464,6 @@ function DemoAuctionApp() {
         />
       ) : (
         <JoinExperience
-          auction={demoAuction}
           onJoined={setParticipant}
           onJoin={joinDemo}
         />
@@ -502,8 +503,7 @@ function Header({
   );
 }
 
-function JoinExperience({ auction, onJoined, onJoin }: {
-  auction: Auction;
+function JoinExperience({ onJoined, onJoin }: {
   onJoined: (participant: Participant) => void;
   onJoin: (username: string, email: string) => Promise<Participant>;
 }) {
@@ -511,7 +511,6 @@ function JoinExperience({ auction, onJoined, onJoin }: {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
-  const status = effectiveStatus(auction);
 
   async function join(event: FormEvent) {
     event.preventDefault();
@@ -535,20 +534,15 @@ function JoinExperience({ auction, onJoined, onJoin }: {
   return (
     <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl items-stretch lg:grid-cols-[1.08fr_.92fr]">
       <section className="relative min-h-[42vh] overflow-hidden bg-ink lg:min-h-0">
-        {auction.image_url ? (
-          <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-contain opacity-80" />
-        ) : (
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,#557867,#18201d_68%)]" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/10 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-10">
-          <span className="status-pill mb-4 border-white/20 bg-ink/45 text-white">
-            <span className={`status-dot ${status}`} />{status}
-          </span>
-          <p className="mb-2 text-xs font-bold uppercase tracking-[.18em] text-white/65">Current lot</p>
-          <h1 className="max-w-2xl text-3xl font-semibold tracking-[-.04em] sm:text-5xl">{auction.title}</h1>
-          <p className="mt-4 max-w-xl leading-7 text-white/72">{auction.description}</p>
-        </div>
+        <Image
+          src={christmasAuctionImage}
+          alt="Roland Berger Christmas Auction"
+          fill
+          sizes="(max-width: 1024px) 100vw, 54vw"
+          className="object-contain opacity-90"
+          placeholder="blur"
+          preload
+        />
       </section>
 
       <section className="flex items-center px-5 py-10 sm:px-12 lg:px-16">
@@ -558,12 +552,6 @@ function JoinExperience({ auction, onJoined, onJoin }: {
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
             Register at any time with your name and email. You stay in the auction automatically when the next product starts.
           </p>
-          <AuctionTimer
-            startsAt={auction.starts_at}
-            status={status}
-            compact
-            className="mt-6"
-          />
           <form className="mt-9 space-y-4" onSubmit={join}>
             <div>
               <label className="field-label" htmlFor="username">Full name</label>
@@ -600,19 +588,9 @@ function JoinExperience({ auction, onJoined, onJoin }: {
             </button>
             {message && <div className="notice notice-error mt-3" role="alert">{message}</div>}
           </form>
-          {status === "ended" && (
-            <div className="notice notice-info mt-5">Bidding for this product has ended, but registration remains open.</div>
-          )}
           <p className="mt-6 text-xs leading-5 text-ink/45">
             Your name is shown with bids. Your email stays private and is available only to auction administrators.
-            Every accepted bid contributes to the donation total for this product.
           </p>
-          <div className="mt-9 flex items-center gap-6 border-t border-ink/10 pt-6 text-sm">
-            <div><span className="block text-ink/45">Opening price</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
-            <div><span className="block text-ink/45">Minimum step</span><strong className="mt-1 block">{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
-            <div><span className="block text-ink/45">Maximum increase</span><strong className="mt-1 block">{auction.maximum_bid_difference == null ? "Unlimited" : formatMoney(auction.maximum_bid_difference, auction.currency)}</strong></div>
-            <div><span className="block text-ink/45">Winning bidders</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
-          </div>
         </div>
       </section>
     </div>
@@ -804,7 +782,8 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                 <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-ink/40">{auction.currency}</span>
                 <input
                   id="bid-amount"
-                  className="field min-h-14 pl-14 text-xl font-semibold tabular-nums"
+                  className="field min-h-14 text-xl font-semibold tabular-nums"
+                  style={{ paddingLeft: "4.5rem" }}
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   inputMode="decimal"
