@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png";
 import { AuctionTimer } from "@/components/auction-timer";
+import { RbLogo } from "@/components/rb-logo";
 import { selectCurrentAuction } from "@/lib/auction-queue";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { maximumNextBid, minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
@@ -482,12 +483,14 @@ function Header({
 }) {
   return (
     <header className="border-b border-ink/10 bg-cream/90 px-4 py-4 backdrop-blur sm:px-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
+      <div className="mx-auto flex max-w-7xl flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="brand-lockup">
-          <span className="brand-mark">A</span>
-          <span>Live Auction</span>
+          <RbLogo />
+          <span className="max-w-44 text-sm leading-tight sm:max-w-none sm:text-base">
+            Christmas Auction
+          </span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center justify-end gap-2 sm:gap-3">
           <span className="hidden text-sm text-ink/55 sm:inline">
             {participantCount} {participantCount === 1 ? "participant" : "participants"}
           </span>
@@ -537,7 +540,7 @@ function JoinExperience({ onJoined, onJoin }: {
       <section className="relative min-h-[42vh] overflow-hidden bg-ink lg:min-h-0">
         <Image
           src={christmasAuctionImage}
-          alt="Roland Berger Christmas Auction"
+          alt="Christmas Auction"
           fill
           sizes="(max-width: 1024px) 100vw, 54vw"
           className="object-contain opacity-90"

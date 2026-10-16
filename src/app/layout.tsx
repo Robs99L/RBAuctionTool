@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Live Auction",
-  description: "A secure realtime auction experience.",
+  title: "Christmas Auction",
+  description: "The Christmas Auction bidding experience.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
