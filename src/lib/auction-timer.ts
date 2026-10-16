@@ -1,10 +1,14 @@
-export const AUCTION_TIMER_SECONDS = 2 * 60;
+export const DEFAULT_AUCTION_TIMER_SECONDS = 2 * 60;
 
-export function remainingAuctionSeconds(startsAt: string | null, now = Date.now()) {
-  if (!startsAt) return AUCTION_TIMER_SECONDS;
+export function remainingAuctionSeconds(
+  startsAt: string | null,
+  durationSeconds = DEFAULT_AUCTION_TIMER_SECONDS,
+  now = Date.now(),
+) {
+  if (!startsAt) return durationSeconds;
   const start = Date.parse(startsAt);
-  if (!Number.isFinite(start)) return AUCTION_TIMER_SECONDS;
-  const deadline = start + AUCTION_TIMER_SECONDS * 1000;
+  if (!Number.isFinite(start)) return durationSeconds;
+  const deadline = start + durationSeconds * 1000;
   return Math.max(0, Math.ceil((deadline - now) / 1000));
 }
 

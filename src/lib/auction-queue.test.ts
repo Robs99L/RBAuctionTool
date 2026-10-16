@@ -13,6 +13,7 @@ function lot(id: string, sortOrder: number, status: Auction["status"]): Auction 
     minimum_increment: 1,
     maximum_bid_difference: null,
     winner_count: 1,
+    timer_duration_seconds: 120,
     currency: "EUR",
     status,
     starts_at: null,

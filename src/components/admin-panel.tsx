@@ -34,6 +34,7 @@ type FormState = {
   minimumIncrement: string;
   maximumDifference: string;
   winnerCount: string;
+  timerDurationMinutes: string;
   currency: string;
 };
 
@@ -51,6 +52,7 @@ const emptyForm: FormState = {
   minimumIncrement: "1",
   maximumDifference: "",
   winnerCount: "1",
+  timerDurationMinutes: "2",
   currency: "EUR",
 };
 
@@ -65,6 +67,7 @@ function formFromAuction(auction: Auction): FormState {
       ? ""
       : String(auction.maximum_bid_difference),
     winnerCount: String(auction.winner_count),
+    timerDurationMinutes: String(auction.timer_duration_seconds / 60),
     currency: auction.currency,
   };
 }
@@ -78,6 +81,7 @@ function normalizedAuction(auction: Auction): Auction {
       ? null
       : Number(auction.maximum_bid_difference),
     winner_count: Number(auction.winner_count ?? 1),
+    timer_duration_seconds: Number(auction.timer_duration_seconds ?? 120),
     sort_order: Number(auction.sort_order),
   };
 }
@@ -379,6 +383,7 @@ function DemoAuctionEditor() {
       ? null
       : Number(form.maximumDifference);
     const winnerCount = Number(form.winnerCount);
+    const timerDurationSeconds = Number(form.timerDurationMinutes) * 60;
     if (
       !Number.isFinite(startingPrice) ||
       startingPrice < 0 ||
@@ -390,11 +395,14 @@ function DemoAuctionEditor() {
       )) ||
       !Number.isSafeInteger(winnerCount) ||
       winnerCount < 1 ||
-      winnerCount > 1000
+      winnerCount > 1000 ||
+      !Number.isSafeInteger(timerDurationSeconds) ||
+      timerDurationSeconds < 30 ||
+      timerDurationSeconds > 86_400
     ) {
       setMessage({
         kind: "error",
-        text: "Enter valid pricing details. The optional maximum increase must be at least the minimum step.",
+        text: "Enter valid pricing details and a timer duration between 0.5 and 1,440 minutes. The optional maximum increase must be at least the minimum step.",
       });
       return;
     }
@@ -424,6 +432,7 @@ function DemoAuctionEditor() {
         minimum_increment: minimumIncrement,
         maximum_bid_difference: maximumDifference,
         winner_count: winnerCount,
+        timer_duration_seconds: timerDurationSeconds,
         currency: form.currency.trim().toUpperCase(),
       }
       : {
@@ -435,6 +444,7 @@ function DemoAuctionEditor() {
         minimum_increment: minimumIncrement,
         maximum_bid_difference: maximumDifference,
         winner_count: winnerCount,
+        timer_duration_seconds: timerDurationSeconds,
         currency: form.currency.trim().toUpperCase(),
         status: "upcoming",
         starts_at: null,
@@ -632,6 +642,7 @@ function AuctionManagerView({
           {auction && (
             <AuctionTimer
               startsAt={auction.starts_at}
+              durationSeconds={auction.timer_duration_seconds}
               status={auction.status}
               compact
               className="mb-7"
@@ -681,7 +692,7 @@ function AuctionManagerView({
                 </div>
               )}
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="field-label" htmlFor="starting-price">Starting price</label>
                 <input id="starting-price" name="startingPrice" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} required />
@@ -709,12 +720,27 @@ function AuctionManagerView({
                 <input id="winner-count" name="winnerCount" type="number" min="1" max="1000" step="1" className="field" value={form.winnerCount} onChange={(event) => updateField("winnerCount", event.target.value)} required />
               </div>
               <div>
+                <label className="field-label" htmlFor="timer-duration">Timer duration (minutes)</label>
+                <input
+                  id="timer-duration"
+                  name="timerDurationMinutes"
+                  type="number"
+                  min="0.5"
+                  max="1440"
+                  step="0.5"
+                  className="field"
+                  value={form.timerDurationMinutes}
+                  onChange={(event) => updateField("timerDurationMinutes", event.target.value)}
+                  required
+                />
+              </div>
+              <div>
                 <label className="field-label" htmlFor="currency">Currency</label>
                 <input id="currency" name="currency" className="field uppercase" value={form.currency} onChange={(event) => updateField("currency", event.target.value.toUpperCase())} minLength={3} maxLength={3} required />
               </div>
             </div>
             <p className="text-xs leading-5 text-ink/45">
-              Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit.
+              Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit. The timer starts when this product goes live and never ends bidding automatically.
             </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
             <div className="flex flex-wrap items-center gap-3 border-t border-ink/10 pt-6">
@@ -738,7 +764,7 @@ function AuctionManagerView({
                 <div className="mt-1 space-y-1 text-xs text-ink/45">
                   <p>Top {auction.winner_count} distinct {auction.winner_count === 1 ? "bidder wins" : "bidders win"}</p>
                   <p className="font-semibold text-forest">
-                    Donation total: {formatMoney(selectedDonationTotal?.total_bid_amount ?? 0, auction.currency)} from {selectedDonationTotal?.bid_count ?? 0} accepted bids
+                    Donation total: {formatMoney(selectedDonationTotal?.total_bid_amount ?? 0, auction.currency)} from {selectedDonationTotal?.bid_count ?? 0} winning {(selectedDonationTotal?.bid_count ?? 0) === 1 ? "bid" : "bids"}
                   </p>
                 </div>
               )}

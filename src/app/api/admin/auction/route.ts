@@ -120,6 +120,7 @@ export async function PUT(request: Request) {
     ? null
     : Number(maximumDifferenceValue);
   const winnerCount = Number(formValue(formData, "winnerCount"));
+  const timerDurationSeconds = Number(formValue(formData, "timerDurationMinutes")) * 60;
   const currency = formValue(formData, "currency").trim().toUpperCase();
   const imageEntry = formData.get("image");
   const imageFile = imageEntry instanceof File && imageEntry.size > 0 ? imageEntry : null;
@@ -140,10 +141,13 @@ export async function PUT(request: Request) {
     !Number.isSafeInteger(winnerCount) ||
     winnerCount < 1 ||
     winnerCount > 1000 ||
+    !Number.isSafeInteger(timerDurationSeconds) ||
+    timerDurationSeconds < 30 ||
+    timerDurationSeconds > 86_400 ||
     !/^[A-Z]{3}$/.test(currency)
   ) {
     return NextResponse.json({
-      error: "Check the title, prices, maximum increase, winner count, and currency.",
+      error: "Check the title, prices, maximum increase, winner count, timer duration, and currency.",
     }, { status: 400 });
   }
 
@@ -199,6 +203,7 @@ export async function PUT(request: Request) {
       minimum_increment: minimumIncrement,
       maximum_bid_difference: maximumDifference,
       winner_count: winnerCount,
+      timer_duration_seconds: timerDurationSeconds,
       currency,
     };
     const query = id

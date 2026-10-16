@@ -1,13 +1,19 @@
+import { selectWinningBids } from "./auction-winners";
+
 type DonationAuction = {
   id: string;
   title: string;
   currency: string;
   sort_order: number;
+  winner_count: number;
 };
 
 type DonationBid = {
+  id: string;
   auction_id: string;
+  participant_id: string;
   amount: number;
+  created_at: string;
 };
 
 export type DonationTotal = {
@@ -23,26 +29,28 @@ export function summarizeDonations(
   auctions: readonly DonationAuction[],
   bids: readonly DonationBid[],
 ): DonationTotal[] {
-  const totals = new Map<string, { bidCount: number; amount: number }>();
+  const bidsByAuction = new Map<string, DonationBid[]>();
 
   for (const bid of bids) {
-    const current = totals.get(bid.auction_id) ?? { bidCount: 0, amount: 0 };
-    totals.set(bid.auction_id, {
-      bidCount: current.bidCount + 1,
-      amount: current.amount + bid.amount,
-    });
+    const auctionBids = bidsByAuction.get(bid.auction_id) ?? [];
+    auctionBids.push(bid);
+    bidsByAuction.set(bid.auction_id, auctionBids);
   }
 
   return auctions
     .map((auction) => {
-      const total = totals.get(auction.id) ?? { bidCount: 0, amount: 0 };
+      const winningBids = selectWinningBids(
+        bidsByAuction.get(auction.id) ?? [],
+        auction.winner_count,
+      );
+      const totalAmount = winningBids.reduce((total, bid) => total + bid.amount, 0);
       return {
         auction_id: auction.id,
         title: auction.title,
         currency: auction.currency,
         sort_order: auction.sort_order,
-        bid_count: total.bidCount,
-        total_bid_amount: Math.round((total.amount + Number.EPSILON) * 100) / 100,
+        bid_count: winningBids.length,
+        total_bid_amount: Math.round((totalAmount + Number.EPSILON) * 100) / 100,
       };
     })
     .sort((left, right) => left.sort_order - right.sort_order);

@@ -9,6 +9,7 @@ export type Auction = {
   minimum_increment: number;
   maximum_bid_difference: number | null;
   winner_count: number;
+  timer_duration_seconds: number;
   currency: string;
   status: AuctionStatus;
   starts_at: string | null;

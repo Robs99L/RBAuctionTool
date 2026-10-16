@@ -41,6 +41,7 @@ function normalizeAuction(value: Record<string, unknown>): Auction {
       ? null
       : Number(value.maximum_bid_difference),
     winner_count: Number(value.winner_count ?? 1),
+    timer_duration_seconds: Number(value.timer_duration_seconds ?? 120),
     sort_order: Number(value.sort_order),
   };
 }
@@ -692,6 +693,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   <p className="mt-4 leading-7 text-ink/60">{auction.description}</p>
                   <AuctionTimer
                     startsAt={auction.starts_at}
+                    durationSeconds={auction.timer_duration_seconds}
                     status={status}
                     className="mt-6"
                   />
@@ -796,7 +798,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                 {isLeadingParticipant
                   ? `You are leading and can raise your own bid${maximum === null ? " by any amount" : " up to the configured maximum"}.`
                   : "The database rechecks the minimum and maximum when submitted."}
-                {" Every accepted bid is added to this product's donation total."}
+                {" The donation total is the sum of the winning bids."}
               </p>
               <button className="btn-primary mt-5 w-full" disabled={status !== "active" || submitting}>
                 {submitting ? "Checking bid…" : status === "active" ? "Place bid" : status === "ended" ? "Auction ended" : "Auction not started"}

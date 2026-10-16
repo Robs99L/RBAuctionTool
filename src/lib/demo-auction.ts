@@ -48,6 +48,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         minimum_increment: 25,
         maximum_bid_difference: 100,
         winner_count: 1,
+        timer_duration_seconds: 120,
         currency: "EUR",
         status: "active",
         starts_at: new Date(now - 30 * 60 * 1000).toISOString(),
@@ -65,6 +66,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         minimum_increment: 20,
         maximum_bid_difference: 100,
         winner_count: 5,
+        timer_duration_seconds: 180,
         currency: "EUR",
         status: "upcoming",
         starts_at: null,
@@ -82,6 +84,7 @@ export function createDemoAuctionState(): DemoAuctionState {
         minimum_increment: 10,
         maximum_bid_difference: 50,
         winner_count: 1,
+        timer_duration_seconds: 300,
         currency: "EUR",
         status: "upcoming",
         starts_at: null,
@@ -138,6 +141,7 @@ export function loadDemoAuctionState() {
             ? null
             : Number(auction.maximum_bid_difference),
           winner_count: Number(auction.winner_count ?? 1),
+          timer_duration_seconds: Number(auction.timer_duration_seconds ?? 120),
         })),
         participants: parsed.participants.map((participant) => ({
           ...participant,
