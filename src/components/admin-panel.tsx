@@ -627,7 +627,7 @@ function AuctionManagerView({
               </p>
               {imagePreviewUrl && (
                 <div className="mt-3 h-40 overflow-hidden rounded-2xl border border-ink/10 bg-mist">
-                  <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-cover" />
+                  <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-contain" />
                 </div>
               )}
             </div>

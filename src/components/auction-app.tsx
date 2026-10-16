@@ -512,7 +512,7 @@ function JoinExperience({ auction, onJoined, onJoin }: {
     <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl items-stretch lg:grid-cols-[1.08fr_.92fr]">
       <section className="relative min-h-[42vh] overflow-hidden bg-ink lg:min-h-0">
         {auction.image_url ? (
-          <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-cover opacity-80" />
+          <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-contain opacity-80" />
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,#557867,#18201d_68%)]" />
         )}
@@ -648,7 +648,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
             <div className="grid md:grid-cols-[.9fr_1.1fr]">
               <div className="relative min-h-72 bg-ink">
                 {auction.image_url ? (
-                  <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-cover" />
+                  <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-contain" />
                 ) : (
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,#557867,#18201d_68%)]" />
                 )}
