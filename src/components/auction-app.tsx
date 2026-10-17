@@ -536,20 +536,19 @@ function JoinExperience({ onJoined, onJoin }: {
   }
 
   return (
-    <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl items-stretch lg:grid-cols-[1.08fr_.92fr]">
-      <section className="relative min-h-[42vh] overflow-hidden bg-ink lg:min-h-0">
+    <div className="mx-auto grid min-h-[calc(100vh-65px)] w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[1.08fr_.92fr]">
+      <section className="min-w-0 max-w-full overflow-hidden bg-ink">
         <Image
           src={christmasAuctionImage}
           alt="Christmas Auction"
-          fill
           sizes="(max-width: 1024px) 100vw, 54vw"
-          className="object-contain opacity-90"
+          className="block h-auto max-w-full opacity-90"
           placeholder="blur"
           preload
         />
       </section>
 
-      <section className="flex items-center px-5 py-10 sm:px-12 lg:px-16">
+      <section className="flex min-w-0 items-center px-5 py-10 sm:px-12 lg:px-16">
         <div className="w-full max-w-lg">
           <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-forest">You’re invited</p>
           <h2 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Join the bidding.</h2>

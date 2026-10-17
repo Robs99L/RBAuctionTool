@@ -244,13 +244,9 @@ export async function POST(request: Request) {
       });
       if (activationError) throw activationError;
     } else {
-      const { error: endError } = await client
-        .from("auctions")
-        .update({ status: "ended", ends_at: new Date().toISOString() })
-        .eq("id", body.id)
-        .eq("status", "active")
-        .select("id")
-        .single();
+      const { error: endError } = await client.rpc("end_auction", {
+        p_auction_id: body.id,
+      });
       if (endError) throw endError;
     }
     const { data, error } = await client
