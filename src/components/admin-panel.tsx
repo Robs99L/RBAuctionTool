@@ -176,7 +176,7 @@ function AdminLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
     <section className="panel mx-auto max-w-lg p-7 sm:p-10">
       <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Protected area</p>
       <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">Auction administration</h1>
-      <p className="mt-4 leading-7 text-ink/60">Enter the server-configured administrator secret to manage the product queue.</p>
+      <p className="mt-4 leading-7 text-ink/60">Enter the server-configured administrator secret to manage the event queue.</p>
       <form className="mt-7" onSubmit={login}>
         <label className="field-label" htmlFor="admin-secret">Administrator secret</label>
         <input
@@ -222,7 +222,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         onSignedOut();
         return;
       }
-      if (!response.ok) throw new Error(data.error ?? "Could not load the product queue.");
+      if (!response.ok) throw new Error(data.error ?? "Could not load the event queue.");
       const nextAuctions = orderAuctions((data.auctions ?? []).map(normalizedAuction));
       const selected = data.auction ? normalizedAuction(data.auction) : null;
       setAuctions(nextAuctions);
@@ -233,7 +233,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     } catch (loadError) {
       setMessage({
         kind: "error",
-        text: loadError instanceof Error ? loadError.message : "Could not load the product queue.",
+        text: loadError instanceof Error ? loadError.message : "Could not load the event queue.",
       });
     } finally {
       setLoading(false);
@@ -258,11 +258,11 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         body: payload,
       });
       const data = (await response.json()) as { auction?: Auction; error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Could not save the product.");
+      if (!response.ok) throw new Error(data.error ?? "Could not save the event.");
       if (data.auction) await load(data.auction.id);
-      setMessage({ kind: "success", text: creating ? "Product added to the queue." : "Product details saved." });
+      setMessage({ kind: "success", text: creating ? "Event added to the queue." : "Event details saved." });
     } catch (saveError) {
-      setMessage({ kind: "error", text: saveError instanceof Error ? saveError.message : "Could not save the product." });
+      setMessage({ kind: "error", text: saveError instanceof Error ? saveError.message : "Could not save the event." });
     } finally {
       setSaving(false);
     }
@@ -281,7 +281,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       const data = (await response.json()) as { auction?: Auction; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not update the auction status.");
       await load(auction.id);
-      setMessage({ kind: "success", text: action === "start" ? "This product is now live." : "Bidding for this product has ended." });
+      setMessage({ kind: "success", text: action === "start" ? "This event is now live." : "Bidding for this event has ended." });
     } catch (statusError) {
       setMessage({ kind: "error", text: statusError instanceof Error ? statusError.message : "Could not update the auction status." });
     } finally {
@@ -458,7 +458,7 @@ function DemoAuctionEditor() {
     commitState({ ...demoState, auctions });
     setSelectedId(nextAuction.id);
     setForm(formFromAuction(nextAuction));
-    setMessage({ kind: "success", text: selected ? "Demo product saved." : "Demo product added to the queue." });
+    setMessage({ kind: "success", text: selected ? "Demo event saved." : "Demo event added to the queue." });
   }
 
   function changeStatus(action: "start" | "end") {
@@ -474,7 +474,7 @@ function DemoAuctionEditor() {
         : { ...item, status: "ended" as const, ends_at: now };
     });
     commitState({ ...demoState, auctions });
-    setMessage({ kind: "success", text: action === "start" ? "Demo product is now live." : "Demo bidding has ended." });
+    setMessage({ kind: "success", text: action === "start" ? "Demo event is now live." : "Demo bidding has ended." });
   }
 
   function resetDemo() {
@@ -584,7 +584,7 @@ function AuctionManagerView({
     <div className="space-y-6">
       {demo && (
         <div className="notice notice-info flex flex-wrap items-center justify-between gap-3">
-          <span><strong>Local demo:</strong> Products and bids are stored only in this browser.</span>
+          <span><strong>Local demo:</strong> Events and bids are stored only in this browser.</span>
           <button className="font-bold underline underline-offset-4" onClick={onReset}>Reset demo</button>
         </div>
       )}
@@ -593,11 +593,11 @@ function AuctionManagerView({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Auction sequence</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Product queue</h1>
+            <h1 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Event queue</h1>
           </div>
           <div className="flex items-center gap-4">
             {onSignOut && <button className="text-link" onClick={onSignOut}>Sign out</button>}
-            <button className="btn-primary" onClick={onNew}>Add product</button>
+            <button className="btn-primary" onClick={onNew}>Add event</button>
           </div>
         </div>
         {auctions.length ? (
@@ -610,7 +610,7 @@ function AuctionManagerView({
                 className={`rounded-2xl border p-4 text-left transition ${auction?.id === item.id ? "border-forest bg-forest text-white" : "border-ink/10 bg-white/70 hover:border-ink/30"}`}
                 onClick={() => onSelect(item.id)}
               >
-                <span className={`text-xs font-bold uppercase tracking-[.12em] ${auction?.id === item.id ? "text-white/55" : "text-ink/45"}`}>Lot {index + 1}</span>
+                <span className={`text-xs font-bold uppercase tracking-[.12em] ${auction?.id === item.id ? "text-white/55" : "text-ink/45"}`}>Event {index + 1}</span>
                 <strong className="mt-2 block truncate">{item.title}</strong>
                 <span className={`mt-1 block text-xs ${auction?.id === item.id ? "text-white/60" : "text-ink/45"}`}>
                   {item.winner_count} {item.winner_count === 1 ? "winner" : "winners"}
@@ -625,7 +625,7 @@ function AuctionManagerView({
             ))}
           </div>
         ) : (
-          <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No products yet. Add the first auction lot.</div>
+          <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No events yet. Add the first event.</div>
         )}
       </section>
 
@@ -633,8 +633,8 @@ function AuctionManagerView({
         <section className="panel p-6 sm:p-8">
           <div className="mb-7 flex items-start justify-between gap-5">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Product settings</p>
-              <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{auction ? "Edit product" : "Add a product"}</h2>
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Event settings</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{auction ? "Edit event" : "Add an event"}</h2>
             </div>
             {auction && <span className="status-pill"><span className={`status-dot ${auction.status}`} />{auction.status}</span>}
           </div>
@@ -651,7 +651,7 @@ function AuctionManagerView({
 
           <form key={auctionKey} onSubmit={onSave} className="space-y-5">
             <div>
-              <label className="field-label" htmlFor="title">Product name</label>
+              <label className="field-label" htmlFor="title">Event name</label>
               <input id="title" name="title" className="field" value={form.title} onChange={(event) => updateField("title", event.target.value)} maxLength={120} required />
             </div>
             <div>
@@ -659,7 +659,7 @@ function AuctionManagerView({
               <textarea id="description" name="description" className="field min-h-32 resize-y" value={form.description} onChange={(event) => updateField("description", event.target.value)} maxLength={4000} />
             </div>
             <div>
-              <label className="field-label" htmlFor="image">Product image</label>
+              <label className="field-label" htmlFor="image">Event image</label>
               <input
                 key={auctionKey}
                 id="image"
@@ -688,7 +688,7 @@ function AuctionManagerView({
               </p>
               {imagePreviewUrl && (
                 <div className="mt-3 aspect-video w-full max-w-2xl overflow-hidden rounded-2xl border border-ink/10 bg-mist">
-                  <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-contain" />
+                  <img src={imagePreviewUrl} alt="Event preview" className="h-full w-full object-contain" />
                 </div>
               )}
             </div>
@@ -740,13 +740,13 @@ function AuctionManagerView({
               </div>
             </div>
             <p className="text-xs leading-5 text-ink/45">
-              Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit. The timer starts when this product goes live and never ends bidding automatically.
+              Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit. The timer starts when this event goes live and never ends bidding automatically.
             </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
             <div className="flex flex-wrap items-center gap-3 border-t border-ink/10 pt-6">
               <button className="btn-primary" disabled={saving}>{saving ? "Saving…" : auction ? "Save changes" : "Add to queue"}</button>
               {auction?.status === "upcoming" && (
-                <button type="button" className="btn-secondary" disabled={saving} onClick={() => onStatusChange("start")}>Start this product</button>
+                <button type="button" className="btn-secondary" disabled={saving} onClick={() => onStatusChange("start")}>Start this event</button>
               )}
               {auction?.status === "active" && (
                 <button type="button" className="btn-danger" disabled={saving} onClick={() => onStatusChange("end")}>End bidding</button>
@@ -758,7 +758,7 @@ function AuctionManagerView({
         <aside className="panel self-start p-6">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected product</p>
+              <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected event</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid history</h2>
               {auction && (
                 <div className="mt-1 space-y-1 text-xs text-ink/45">
@@ -791,7 +791,7 @@ function AuctionManagerView({
               })}
             </ol>
           ) : (
-            <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No accepted bids for this product yet.</div>
+            <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No accepted bids for this event yet.</div>
           )}
         </aside>
       </div>

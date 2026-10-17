@@ -108,7 +108,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   if (!(await isAdminRequest())) return unauthorized();
   const formData = await request.formData().catch(() => null);
-  if (!formData) return NextResponse.json({ error: "Invalid product form data." }, { status: 400 });
+  if (!formData) return NextResponse.json({ error: "Invalid event form data." }, { status: 400 });
 
   const id = formValue(formData, "id").trim();
   const title = formValue(formData, "title").trim();
@@ -152,7 +152,7 @@ export async function PUT(request: Request) {
   }
 
   if (imageFile && imageFile.size > PRODUCT_IMAGE_MAX_BYTES) {
-    return NextResponse.json({ error: "Product images must not exceed 4 MB." }, { status: 413 });
+    return NextResponse.json({ error: "Event images must not exceed 4 MB." }, { status: 413 });
   }
 
   let imageUpload: { bytes: Uint8Array; extension: "png" | "jpg" } | null = null;
@@ -160,7 +160,7 @@ export async function PUT(request: Request) {
     const bytes = new Uint8Array(await imageFile.arrayBuffer());
     const extension = productImageExtension(imageFile.type, bytes);
     if (!extension) {
-      return NextResponse.json({ error: "Product images must be valid PNG or JPEG files." }, { status: 400 });
+      return NextResponse.json({ error: "Event images must be valid PNG or JPEG files." }, { status: 400 });
     }
     imageUpload = { bytes, extension };
   }

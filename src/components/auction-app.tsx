@@ -794,15 +794,14 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   inputMode="decimal"
                   placeholder={minimum.toFixed(2)}
                   disabled={status !== "active" || submitting}
-                  aria-describedby="bid-help"
+                  aria-describedby={isLeadingParticipant ? undefined : "bid-help"}
                 />
               </div>
-              <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
-                {isLeadingParticipant
-                  ? `You are leading and can raise your own bid${maximum === null ? " by any amount" : " up to the configured maximum"}.`
-                  : "The database rechecks the minimum and maximum when submitted."}
-                {" The donation total is the sum of the winning bids."}
-              </p>
+              {!isLeadingParticipant && (
+                <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
+                  The database rechecks the minimum and maximum when submitted.
+                </p>
+              )}
               <button className="btn-primary mt-5 w-full" disabled={status !== "active" || submitting}>
                 {submitting ? "Checking bid…" : status === "active" ? "Place bid" : status === "ended" ? "Auction ended" : "Auction not started"}
               </button>
