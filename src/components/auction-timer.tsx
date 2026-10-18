@@ -59,7 +59,7 @@ export function AuctionTimer({
           ? "The timer has elapsed; bidding remains open"
           : `${remainingSeconds} seconds remaining`}
     >
-      <div className="flex items-center justify-between gap-5">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
         <div className="min-w-0">
           <p className={`font-bold uppercase tracking-[.15em] ${elapsed ? "text-coral" : "text-forest"} ${compact ? "text-[10px]" : "text-xs"}`}>
             {starting ? "Bidding starts in" : elapsed ? "Timer elapsed" : "Time remaining"}
@@ -80,7 +80,7 @@ export function AuctionTimer({
             </p>
           )}
         </div>
-        <strong className={`${elapsed ? "text-coral" : "text-ink"} shrink-0 tabular-nums ${compact ? "text-2xl" : "text-4xl"}`}>
+        <strong className={`${elapsed ? "text-coral" : "text-ink"} shrink-0 self-end tabular-nums sm:self-auto ${compact ? "text-2xl" : "text-4xl"}`}>
           {formatAuctionTimer(displayedSeconds)}
         </strong>
       </div>

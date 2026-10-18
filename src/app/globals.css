@@ -13,7 +13,11 @@
 
 * { box-sizing: border-box; }
 
-html { background: var(--cream); }
+html {
+  background: var(--cream);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
   margin: 0;
@@ -24,7 +28,10 @@ body {
 }
 
 button, input, textarea, select { font: inherit; }
-button, a { -webkit-tap-highlight-color: transparent; }
+button, a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 
 ::selection { background: var(--lime); color: var(--ink); }
 
@@ -34,10 +41,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
   gap: 0.65rem;
   color: var(--ink);
   font-weight: 750;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 
 .text-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
   color: var(--forest);
   font-size: 0.9rem;
   font-weight: 700;
@@ -73,6 +83,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   color: var(--ink);
   outline: none;
   padding: 0.8rem 0.9rem;
+  font-size: 1rem;
   transition: border-color 160ms, box-shadow 160ms;
 }
 

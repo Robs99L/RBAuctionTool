@@ -810,16 +810,16 @@ function AuctionManagerView({
         </div>
       )}
 
-      <section className="panel p-5 sm:p-6">
+      <section className="panel p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Auction sequence</p>
             <h1 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Event queue</h1>
           </div>
-          <div className="flex items-center gap-4">
-            {!demo && <a className="text-link" href="/api/admin/export">Export winners</a>}
-            {onSignOut && <button className="text-link" onClick={onSignOut}>Sign out</button>}
-            <button className="btn-primary" onClick={onNew}>Add event</button>
+          <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 sm:w-auto sm:justify-end">
+            {!demo && <a className="text-link inline-flex min-h-11 items-center" href="/api/admin/export">Export winners</a>}
+            {onSignOut && <button className="text-link min-h-11" onClick={onSignOut}>Sign out</button>}
+            <button className="btn-primary w-full sm:w-auto" onClick={onNew}>Add event</button>
           </div>
         </div>
         {auctions.length ? (
@@ -853,19 +853,19 @@ function AuctionManagerView({
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="panel p-6 sm:p-8">
+        <section className="panel p-4 sm:p-8">
           <div className="mb-7 flex flex-wrap items-start justify-between gap-5">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Event settings</p>
-              <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{auction ? "Edit event" : "Add an event"}</h2>
+              <h2 className="mt-2 text-3xl font-semibold">{auction ? "Edit event" : "Add an event"}</h2>
             </div>
             {auction && (
-              <div className="flex flex-wrap justify-end gap-2">
-                <button type="button" className="btn-secondary" disabled={saving || selectedIndex <= 0} onClick={() => onQueueAction("move_up")}>Move up</button>
-                <button type="button" className="btn-secondary" disabled={saving || selectedIndex >= auctions.length - 1} onClick={() => onQueueAction("move_down")}>Move down</button>
-                <button type="button" className="btn-secondary" disabled={saving} onClick={() => onQueueAction("duplicate")}>Duplicate</button>
+              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+                <button type="button" className="btn-secondary w-full sm:w-auto" disabled={saving || selectedIndex <= 0} onClick={() => onQueueAction("move_up")}>Move up</button>
+                <button type="button" className="btn-secondary w-full sm:w-auto" disabled={saving || selectedIndex >= auctions.length - 1} onClick={() => onQueueAction("move_down")}>Move down</button>
+                <button type="button" className="btn-secondary w-full sm:w-auto" disabled={saving} onClick={() => onQueueAction("duplicate")}>Duplicate</button>
                 {auction.status === "upcoming" && (
-                  <button type="button" className="btn-danger" disabled={saving} onClick={() => setConfirmation("delete")}>Delete</button>
+                  <button type="button" className="btn-danger w-full sm:w-auto" disabled={saving} onClick={() => setConfirmation("delete")}>Delete</button>
                 )}
               </div>
             )}
@@ -906,7 +906,7 @@ function AuctionManagerView({
                 name="image"
                 type="file"
                 accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-                className="field file:mr-4 file:rounded-full file:border-0 file:bg-forest file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
+                className="field text-sm file:mr-2 file:rounded-full file:border-0 file:bg-forest file:px-3 file:py-2 file:text-sm file:font-bold file:text-white sm:file:mr-4 sm:file:px-4"
                 disabled={contentLocked}
                 onChange={(event) => {
                   const file = event.target.files?.[0] ?? null;
@@ -988,20 +988,20 @@ function AuctionManagerView({
               Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit. The timer starts when this event goes live and never ends bidding automatically.
             </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
-            <div className="flex flex-wrap items-center gap-3 border-t border-ink/10 pt-6">
-              <button className="btn-primary" disabled={saving || contentLocked}>{saving ? "Saving…" : auction ? "Save changes" : "Add to queue"}</button>
+            <div className="grid gap-3 border-t border-ink/10 pt-6 sm:flex sm:flex-wrap sm:items-center">
+              <button className="btn-primary w-full sm:w-auto" disabled={saving || contentLocked}>{saving ? "Saving…" : auction ? "Save changes" : "Add to queue"}</button>
               {auction?.status === "upcoming" && (
-                <button type="button" className="btn-secondary" disabled={saving} onClick={() => setConfirmation("start")}>Start this event</button>
+                <button type="button" className="btn-secondary w-full sm:w-auto" disabled={saving} onClick={() => setConfirmation("start")}>Start this event</button>
               )}
               {auction?.status === "active" && (
-                <button type="button" className="btn-danger" disabled={saving} onClick={() => setConfirmation("end")}>End bidding</button>
+                <button type="button" className="btn-danger w-full sm:w-auto" disabled={saving} onClick={() => setConfirmation("end")}>End bidding</button>
               )}
             </div>
           </form>
         </section>
 
-        <aside className="panel self-start p-6">
-          <div className="flex items-end justify-between gap-4">
+        <aside className="panel self-start p-4 sm:p-6">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected event</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid history</h2>
@@ -1014,23 +1014,23 @@ function AuctionManagerView({
                 </div>
               )}
             </div>
-            <button className="text-link" onClick={onRefresh}>Refresh</button>
+            <button className="text-link min-h-11" onClick={onRefresh}>Refresh</button>
           </div>
           {bids.length && auction ? (
             <ol className="mt-5 divide-y divide-ink/10">
               {bids.map((bid) => {
                 const winningRank = winningRanks.get(bid.id);
                 return (
-                <li key={bid.id} className="flex items-center justify-between gap-3 py-3">
+                <li key={bid.id} className="flex items-start justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <p className="flex items-center gap-2 truncate text-sm font-semibold">
-                      <span className="truncate">{bid.username}</span>
-                      {winningRank && <span className="rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
+                    <p className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold">
+                      <span className="max-w-full truncate">{bid.username}</span>
+                      {winningRank && <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
                     </p>
                     <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
                     {bid.email && <p className="mt-0.5 truncate text-xs text-ink/45">{bid.email}</p>}
                   </div>
-                  <strong className="text-sm tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
+                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
                 </li>
                 );
               })}
@@ -1079,7 +1079,7 @@ function AuctionManagerView({
           }}
         >
           <section
-            className="w-full max-w-md rounded-lg bg-white p-6 shadow-2xl"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg bg-white p-5 shadow-2xl sm:p-6"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirmation-title"
@@ -1095,11 +1095,11 @@ function AuctionManagerView({
                   ? "The final winners will be recorded immediately. This action cannot be reversed."
                   : "Only an upcoming event without registrations or bids can be deleted."}
             </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button type="button" className="btn-secondary" autoFocus onClick={() => setConfirmation(null)}>Cancel</button>
+            <div className="mt-6 grid gap-3 sm:flex sm:justify-end">
+              <button type="button" className="btn-secondary w-full sm:w-auto" autoFocus onClick={() => setConfirmation(null)}>Cancel</button>
               <button
                 type="button"
-                className={confirmation === "start" ? "btn-primary" : "btn-danger"}
+                className={`${confirmation === "start" ? "btn-primary" : "btn-danger"} w-full sm:w-auto`}
                 onClick={() => {
                   const action = confirmation;
                   setConfirmation(null);

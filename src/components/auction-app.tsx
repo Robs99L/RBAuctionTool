@@ -642,19 +642,19 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
   }
 
   return (
-    <div className="mx-auto grid min-h-[calc(100vh-65px)] w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[1.08fr_.92fr]">
-      <section className="min-w-0 max-w-full overflow-hidden bg-ink">
+    <div className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-center lg:min-h-[calc(100dvh-81px)] lg:grid-cols-[1.08fr_.92fr]">
+      <section className="h-36 min-w-0 max-w-full overflow-hidden bg-ink sm:h-56 lg:h-auto">
         <Image
           src={christmasAuctionImage}
           alt="Christmas Auction"
           sizes="(max-width: 1024px) 100vw, 54vw"
-          className="block h-auto max-w-full opacity-90"
+          className="block h-full w-full object-cover opacity-90 lg:h-auto lg:object-contain"
           placeholder="blur"
           preload
         />
       </section>
 
-      <section className="flex min-w-0 items-center px-5 py-10 sm:px-12 lg:px-16">
+      <section className="flex min-w-0 items-center px-5 py-8 sm:px-12 sm:py-10 lg:px-16">
         <div className="w-full max-w-lg">
           <h2 className="break-words text-3xl font-semibold sm:text-4xl">Welcome to the OPS/IND Christmas Auction</h2>
           <p className="mt-3 text-lg font-semibold text-forest">Join the bidding.</p>
@@ -794,9 +794,9 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
           Live updates are reconnecting. Accepted bids are still checked against the latest database value.
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,.85fr)]">
-        <div className="space-y-6">
-          <section className="panel overflow-hidden">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,.85fr)]">
+        <div className="contents lg:block lg:space-y-6">
+          <section className="panel order-1 overflow-hidden lg:order-none">
             <div>
               <div className="relative aspect-video w-full bg-ink">
                 {auction.image_url ? (
@@ -805,13 +805,13 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,#557867,#18201d_68%)]" />
                 )}
               </div>
-              <div className="flex flex-col justify-between p-6 sm:p-8">
+              <div className="flex flex-col justify-between p-5 sm:p-8">
                 <div>
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-xs font-bold uppercase tracking-[.18em] text-forest">Current lot</p>
                     <span className="status-pill"><span className={`status-dot ${status}`} />{starting ? "starting" : status}</span>
                   </div>
-                  <h1 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">{auction.title}</h1>
+                  <h1 className="mt-4 break-words text-3xl font-semibold sm:text-4xl">{auction.title}</h1>
                   <p className="mt-4 leading-7 text-ink/60">{auction.description}</p>
                   <AuctionTimer
                     startsAt={auction.starts_at}
@@ -820,7 +820,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                     className="mt-6"
                   />
                 </div>
-                <div className="mt-8 flex flex-wrap gap-8 border-t border-ink/10 pt-5 text-sm">
+                <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-ink/10 pt-5 text-sm sm:flex sm:flex-wrap sm:gap-8">
                   <div><span className="block text-ink/45">Opening</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                   <div><span className="block text-ink/45">Bid step</span><strong className="mt-1 block">+{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
                   <div><span className="block text-ink/45">Max. increase</span><strong className="mt-1 block">{auction.maximum_bid_difference == null ? "Unlimited" : `+${formatMoney(auction.maximum_bid_difference, auction.currency)}`}</strong></div>
@@ -830,8 +830,8 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
             </div>
           </section>
 
-          <section className="panel p-5 sm:p-7">
-            <div className="mb-5 flex items-end justify-between gap-4">
+          <section className="panel order-3 p-5 sm:p-7 lg:order-none">
+            <div className="mb-5 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">
                   {status === "ended" ? "Final result" : "Current standings"}
@@ -852,9 +852,9 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                 {leaderboard.map((entry) => (
                   <li
                     key={entry.participant_id}
-                    className={`grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
+                    className={`grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 py-3 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto] sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
                   >
-                    <span className={`grid h-9 w-9 place-items-center rounded-full text-sm font-bold ${entry.is_winner ? "bg-lime" : "bg-ink/5"}`}>
+                    <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold sm:h-9 sm:w-9 ${entry.is_winner ? "bg-lime" : "bg-ink/5"}`}>
                       {entry.bidder_rank}
                     </span>
                     <div className="min-w-0">
@@ -865,7 +865,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                         </span>
                       )}
                     </div>
-                    <strong className="tabular-nums">{formatMoney(entry.amount, auction.currency)}</strong>
+                    <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(entry.amount, auction.currency)}</strong>
                   </li>
                 ))}
               </ol>
@@ -876,8 +876,8 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
             )}
           </section>
 
-          <section className="panel p-5 sm:p-7">
-            <div className="mb-5 flex items-end justify-between">
+          <section className="panel order-4 p-5 sm:p-7 lg:order-none">
+            <div className="mb-5 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Activity</p>
                 <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Recent bids</h2>
@@ -887,15 +887,15 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
             {bids.length ? (
               <ol className="divide-y divide-ink/10">
                 {bids.map((bid) => (
-                    <li key={bid.id} className="grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-4 first:pt-1">
-                      <span className="grid h-9 w-9 place-items-center rounded-full bg-ink/5 text-xs font-bold">
+                    <li key={bid.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 py-4 first:pt-1 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto] sm:gap-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-ink/5 text-xs font-bold sm:h-9 sm:w-9">
                         {bid.username.slice(0, 2).toUpperCase()}
                       </span>
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{bid.username}</p>
                         <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
                       </div>
-                      <strong className="tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
+                      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(bid.amount, auction.currency)}</strong>
                     </li>
                 ))}
               </ol>
@@ -908,16 +908,16 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
           </section>
         </div>
 
-        <aside className="lg:sticky lg:top-6 lg:self-start">
+        <aside className="order-2 lg:order-none lg:sticky lg:top-6 lg:self-start">
           <section className="overflow-hidden rounded-3xl bg-forest text-white shadow-card">
             <div className="p-6 sm:p-8">
               <p className="text-xs font-bold uppercase tracking-[.18em] text-white/55">{highest ? "Current highest bid" : "Opening price"}</p>
-              <p className="mt-3 text-5xl font-semibold tracking-[-.055em] tabular-nums sm:text-6xl">
+              <p className="mt-3 break-words text-4xl font-semibold tabular-nums sm:text-6xl">
                 {formatMoney(highest?.amount ?? auction.starting_price, auction.currency)}
               </p>
               <div className="mt-5 flex min-h-10 items-center gap-3 border-t border-white/15 pt-5">
                 {highest ? (
-                  <><span className="grid h-9 w-9 place-items-center rounded-full bg-lime text-xs font-bold text-ink">{highest.username.slice(0, 2).toUpperCase()}</span><div><span className="block text-xs text-white/50">Leading participant</span><strong>{highest.username}</strong></div></>
+                  <><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-lime text-xs font-bold text-ink">{highest.username.slice(0, 2).toUpperCase()}</span><div className="min-w-0"><span className="block text-xs text-white/50">Leading participant</span><strong className="block truncate">{highest.username}</strong></div></>
                 ) : (
                   <span className="text-sm text-white/58">Waiting for the first bid</span>
                 )}
@@ -926,12 +926,12 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
 
             {participant ? (
             <form onSubmit={submitBid} className="bg-white p-6 text-ink sm:p-8">
-              <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="mb-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div>
                   <span className="block text-xs font-bold uppercase tracking-[.13em] text-ink/45">Bidding as</span>
                   <strong className="mt-1 block">{participant.username}</strong>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
                   <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Min. {formatMoney(minimum, auction.currency)}</span>
                   {maximum !== null && (
                     <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Max. {formatMoney(maximum, auction.currency)}</span>
@@ -993,8 +993,8 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
 
 function NoAuction() {
   return (
-    <main className="grid min-h-screen place-items-center bg-cream p-5">
-      <section className="panel max-w-lg p-8 text-center">
+    <main className="grid min-h-dvh place-items-center bg-cream p-5">
+      <section className="panel max-w-lg p-6 text-center sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Ready for a lot</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">No auction has been created</h1>
         <p className="mt-4 leading-7 text-ink/60">Use the protected administration page to create the first auction.</p>
@@ -1006,8 +1006,8 @@ function NoAuction() {
 
 function ErrorScreen({ message }: { message: string }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-cream p-5">
-      <section className="panel max-w-lg p-8">
+    <main className="grid min-h-dvh place-items-center bg-cream p-5">
+      <section className="panel max-w-lg p-6 sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-coral">Connection error</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">The auction could not load</h1>
         <div className="notice notice-error mt-5">{message}</div>
@@ -1019,8 +1019,8 @@ function ErrorScreen({ message }: { message: string }) {
 
 function ConfigurationScreen() {
   return (
-    <main className="grid min-h-screen place-items-center bg-cream p-5">
-      <section className="panel max-w-lg p-8">
+    <main className="grid min-h-dvh place-items-center bg-cream p-5">
+      <section className="panel max-w-lg p-6 sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-coral">Service unavailable</p>
         <h1 className="mt-3 text-3xl font-semibold">Auction configuration is missing</h1>
         <p className="mt-4 leading-7 text-ink/60">
