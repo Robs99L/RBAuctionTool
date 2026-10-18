@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { selectCurrentAuction } from "./auction-queue";
+import { selectCurrentAuction, selectNextAuction } from "./auction-queue";
 import type { Auction } from "./types";
 
 function lot(id: string, sortOrder: number, status: Auction["status"]): Auction {
@@ -45,5 +45,18 @@ describe("auction queue", () => {
       lot("first", 1, "ended"),
       lot("last", 2, "ended"),
     ])?.id).toBe("last");
+  });
+
+  it("selects the next upcoming lot after the current one", () => {
+    const auctions = [
+      lot("ended", 1, "ended"),
+      lot("live", 2, "active"),
+      lot("skipped", 3, "ended"),
+      lot("next", 4, "upcoming"),
+      lot("later", 5, "upcoming"),
+    ];
+
+    expect(selectNextAuction(auctions, "live")?.id).toBe("next");
+    expect(selectNextAuction(auctions, "later")).toBeNull();
   });
 });

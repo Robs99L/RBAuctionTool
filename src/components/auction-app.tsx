@@ -7,7 +7,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png";
 import { AuctionTimer } from "@/components/auction-timer";
 import { RbLogo } from "@/components/rb-logo";
-import { selectCurrentAuction } from "@/lib/auction-queue";
+import { selectCurrentAuction, selectNextAuction } from "@/lib/auction-queue";
 import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { maximumNextBid, minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
@@ -128,6 +128,7 @@ export function AuctionApp() {
     () => (configured && !demoMode ? getSupabaseBrowserClient() : null),
     [configured, demoMode],
   );
+  const [auctions, setAuctions] = useState<Auction[]>([]);
   const [auction, setAuction] = useState<Auction | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
@@ -138,6 +139,10 @@ export function AuctionApp() {
   const [error, setError] = useState("");
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const auctionId = auction?.id;
+  const nextAuction = useMemo(
+    () => selectNextAuction(auctions, auctionId),
+    [auctionId, auctions],
+  );
 
   const loadCurrentAuction = useCallback(async () => {
     if (!client) return;
@@ -146,8 +151,9 @@ export function AuctionApp() {
       .select("*")
       .order("sort_order", { ascending: true });
     if (loadError) throw loadError;
-    const auctions = (data ?? []).map((row) => normalizeAuction(row));
-    setAuction(selectCurrentAuction(auctions));
+    const nextAuctions = (data ?? []).map((row) => normalizeAuction(row));
+    setAuctions(nextAuctions);
+    setAuction(selectCurrentAuction(nextAuctions));
   }, [client]);
 
   const refreshDashboard = useCallback(async () => {
@@ -390,7 +396,12 @@ export function AuctionApp() {
           refreshDashboard={refreshDashboard}
         />
       ) : (
-        <JoinExperience auction={auction} onJoined={setParticipant} onJoin={joinAuction} />
+        <JoinExperience
+          auction={auction}
+          nextEventName={nextAuction?.title ?? null}
+          onJoined={setParticipant}
+          onJoin={joinAuction}
+        />
       )}
     </main>
   );
@@ -402,6 +413,10 @@ function DemoAuctionApp() {
   const demoAuction = useMemo(
     () => demoState ? selectCurrentAuction(demoState.auctions) : null,
     [demoState],
+  );
+  const demoNextAuction = useMemo(
+    () => demoState ? selectNextAuction(demoState.auctions, demoAuction?.id) : null,
+    [demoAuction?.id, demoState],
   );
   const demoBids = useMemo(
     () => demoState && demoAuction
@@ -554,6 +569,7 @@ function DemoAuctionApp() {
       ) : (
         <JoinExperience
           auction={demoAuction}
+          nextEventName={demoNextAuction?.title ?? null}
           onJoined={setParticipant}
           onJoin={joinDemo}
         />
@@ -595,8 +611,9 @@ function Header({
   );
 }
 
-function JoinExperience({ auction, onJoined, onJoin }: {
+function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
   auction: Auction;
+  nextEventName: string | null;
   onJoined: (participant: Participant) => void;
   onJoin: (username: string, email: string) => Promise<Participant>;
 }) {
@@ -639,15 +656,17 @@ function JoinExperience({ auction, onJoined, onJoin }: {
 
       <section className="flex min-w-0 items-center px-5 py-10 sm:px-12 lg:px-16">
         <div className="w-full max-w-lg">
-          <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-forest">You’re invited</p>
-          <h2 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Join the bidding.</h2>
+          <h2 className="break-words text-3xl font-semibold sm:text-4xl">Welcome to the OPS/IND Christmas Auction</h2>
+          <p className="mt-3 text-lg font-semibold text-forest">Join the bidding.</p>
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
-            Register with your name and email while bidding is open. You stay in the auction automatically when the next product starts.
+            Register with your name and email. You stay in the auction automatically when the next bidding round starts.
           </p>
           <AuctionTimer
             startsAt={auction.starts_at}
             durationSeconds={auction.timer_duration_seconds}
             status={auction.status}
+            eventName={auction.title}
+            nextEventName={nextEventName}
             compact
             className="mt-6"
           />

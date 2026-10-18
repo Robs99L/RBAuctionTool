@@ -13,12 +13,16 @@ export function AuctionTimer({
   startsAt,
   durationSeconds,
   status,
+  eventName,
+  nextEventName,
   compact = false,
   className = "",
 }: {
   startsAt: string | null;
   durationSeconds: number;
   status: AuctionStatus;
+  eventName?: string;
+  nextEventName?: string | null;
   compact?: boolean;
   className?: string;
 }) {
@@ -56,15 +60,27 @@ export function AuctionTimer({
           : `${remainingSeconds} seconds remaining`}
     >
       <div className="flex items-center justify-between gap-5">
-        <div>
+        <div className="min-w-0">
           <p className={`font-bold uppercase tracking-[.15em] ${elapsed ? "text-coral" : "text-forest"} ${compact ? "text-[10px]" : "text-xs"}`}>
             {starting ? "Bidding starts in" : elapsed ? "Timer elapsed" : "Time remaining"}
           </p>
-          <p className={`mt-1 text-ink/55 ${compact ? "text-xs" : "text-sm"}`}>
-            {starting ? "Get ready." : "Bidding closes manually."}
-          </p>
+          {eventName && (
+            <p className={`break-words font-semibold text-ink ${compact ? "mt-1 text-sm" : "mt-2 text-base"}`}>
+              {eventName}
+            </p>
+          )}
+          {nextEventName && (
+            <p className={`break-words text-ink/60 ${compact ? "mt-1 text-xs" : "mt-2 text-sm"}`}>
+              <span className="font-semibold text-ink">Next Bidding:</span> {nextEventName}
+            </p>
+          )}
+          {starting && (
+            <p className={`mt-1 text-ink/55 ${compact ? "text-xs" : "text-sm"}`}>
+              Get ready.
+            </p>
+          )}
         </div>
-        <strong className={`${elapsed ? "text-coral" : "text-ink"} tabular-nums tracking-[-.04em] ${compact ? "text-2xl" : "text-4xl"}`}>
+        <strong className={`${elapsed ? "text-coral" : "text-ink"} shrink-0 tabular-nums ${compact ? "text-2xl" : "text-4xl"}`}>
           {formatAuctionTimer(displayedSeconds)}
         </strong>
       </div>
