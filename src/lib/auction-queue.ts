@@ -14,6 +14,16 @@ export function selectCurrentAuction(auctions: Auction[]) {
   );
 }
 
+export function selectParticipantAuction(auctions: Auction[]) {
+  const ordered = orderAuctions(auctions);
+  return (
+    ordered.find((auction) => auction.status === "active") ??
+    [...ordered].reverse().find((auction) => auction.status === "ended") ??
+    ordered.find((auction) => auction.status === "upcoming") ??
+    null
+  );
+}
+
 export function selectNextAuction(
   auctions: Auction[],
   currentAuctionId: string | null | undefined,

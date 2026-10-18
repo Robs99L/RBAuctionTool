@@ -27,7 +27,6 @@ export async function GET() {
       "Winning amount",
       "Currency",
       "Finalized at",
-      "Payment status",
       "Paid at",
     ];
     const rows = (data ?? []).map((entry: Record<string, unknown>) => [
@@ -39,7 +38,6 @@ export async function GET() {
       entry.winning_amount,
       entry.currency,
       entry.finalized_at,
-      entry.payment_status,
       entry.paid_at,
     ]);
     const csv = `\uFEFF${[columns, ...rows]

@@ -7,7 +7,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png";
 import { AuctionTimer } from "@/components/auction-timer";
 import { RbLogo } from "@/components/rb-logo";
-import { selectCurrentAuction, selectNextAuction } from "@/lib/auction-queue";
+import { selectNextAuction, selectParticipantAuction } from "@/lib/auction-queue";
 import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { maximumNextBid, minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
@@ -153,7 +153,7 @@ export function AuctionApp() {
     if (loadError) throw loadError;
     const nextAuctions = (data ?? []).map((row) => normalizeAuction(row));
     setAuctions(nextAuctions);
-    setAuction(selectCurrentAuction(nextAuctions));
+    setAuction(selectParticipantAuction(nextAuctions));
   }, [client]);
 
   const refreshDashboard = useCallback(async () => {
@@ -411,7 +411,7 @@ function DemoAuctionApp() {
   const [demoState, setDemoState] = useState<DemoAuctionState | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const demoAuction = useMemo(
-    () => demoState ? selectCurrentAuction(demoState.auctions) : null,
+    () => demoState ? selectParticipantAuction(demoState.auctions) : null,
     [demoState],
   );
   const demoNextAuction = useMemo(
@@ -447,7 +447,7 @@ function DemoAuctionApp() {
     const load = () => {
       const next = loadDemoAuctionState();
       const participantId = loadDemoParticipantId();
-      const currentAuction = selectCurrentAuction(next.auctions);
+      const currentAuction = selectParticipantAuction(next.auctions);
       setDemoState(next);
       const existingParticipant = next.participants.find((item) => item.id === participantId);
       setParticipant(

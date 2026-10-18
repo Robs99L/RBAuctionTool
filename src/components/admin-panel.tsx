@@ -20,7 +20,6 @@ import { formatMoney, formatTime } from "@/lib/format";
 import { getSupabaseBrowserClient, hasSupabaseBrowserConfig } from "@/lib/supabase-browser";
 import type {
   Auction,
-  WinnerPaymentStatus,
   WinnerReportEntry,
 } from "@/lib/types";
 
@@ -127,7 +126,7 @@ function mapWinnerReport(rows: Array<Record<string, unknown>> = []): WinnerRepor
     winning_amount: Number(row.winning_amount),
     currency: String(row.currency),
     finalized_at: String(row.finalized_at),
-    payment_status: String(row.payment_status) as WinnerPaymentStatus,
+    payment_status: String(row.payment_status) as WinnerReportEntry["payment_status"],
     paid_at: row.paid_at ? String(row.paid_at) : null,
   }));
 }
@@ -390,32 +389,6 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     }
   }
 
-  async function changePayment(participantId: string, paymentStatus: WinnerPaymentStatus) {
-    if (!auction || saving) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/admin/auction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: auction.id,
-          action: "payment",
-          participantId,
-          paymentStatus,
-        }),
-      });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "Could not update payment status.");
-      await load(auction.id, true);
-      setMessage({ kind: "success", text: "Payment status updated." });
-    } catch (paymentError) {
-      setMessage({ kind: "error", text: paymentError instanceof Error ? paymentError.message : "Could not update payment status." });
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function signOut() {
     await fetch("/api/admin/session", { method: "DELETE" });
     onSignedOut();
@@ -459,7 +432,6 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       onStatusChange={(action) => void changeStatus(action)}
       onQueueAction={(action) => void queueAction(action)}
       onDelete={() => void deleteAuction()}
-      onPaymentChange={(participantId, status) => void changePayment(participantId, status)}
       onRefresh={() => void load(auction?.id)}
       onSignOut={() => void signOut()}
     />
@@ -772,7 +744,6 @@ function AuctionManagerView({
   onStatusChange,
   onQueueAction,
   onDelete,
-  onPaymentChange,
   onRefresh,
   onSignOut,
   onReset,
@@ -793,7 +764,6 @@ function AuctionManagerView({
   onStatusChange: (action: "start" | "end") => void;
   onQueueAction: (action: "move_up" | "move_down" | "duplicate") => void;
   onDelete: () => void;
-  onPaymentChange?: (participantId: string, status: WinnerPaymentStatus) => void;
   onRefresh: () => void;
   onSignOut?: () => void;
   onReset?: () => void;
@@ -1073,8 +1043,8 @@ function AuctionManagerView({
             <div className="mt-7 border-t border-ink/10 pt-6">
               <div className="flex items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Settlement</p>
-                  <h3 className="mt-1 text-lg font-semibold">Winner payments</h3>
+                  <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Final result</p>
+                  <h3 className="mt-1 text-lg font-semibold">Winners</h3>
                 </div>
                 {!demo && <a className="text-link text-sm" href="/api/admin/export">CSV export</a>}
               </div>
@@ -1088,20 +1058,6 @@ function AuctionManagerView({
                           <p className="truncate text-xs text-ink/45">{entry.email}</p>
                           <p className="mt-1 text-xs font-semibold text-forest">{formatMoney(entry.winning_amount, entry.currency)}</p>
                         </div>
-                        <select
-                          className="field w-28 py-2 text-sm"
-                          aria-label={`Payment status for ${entry.username}`}
-                          value={entry.payment_status}
-                          disabled={!onPaymentChange || saving}
-                          onChange={(event) => onPaymentChange?.(
-                            entry.participant_id,
-                            event.target.value as WinnerPaymentStatus,
-                          )}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="paid">Paid</option>
-                          <option value="waived">Waived</option>
-                        </select>
                       </div>
                     </li>
                   ))}

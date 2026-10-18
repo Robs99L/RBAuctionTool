@@ -13,7 +13,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Row Level Security with no browser access to insert bids or change auction settings
 - Protected `/admin` page for creating/editing, starting, and ending an auction, uploading product images, configuring how many distinct highest bidders win, and viewing ranked bid history
 - Queue reordering, safe duplication/deletion, explicit start/end confirmations, Realtime admin refresh with a polling fallback, and an append-only change audit
-- Finalized-winner CSV export with private contacts, winning amounts, and payment reconciliation status
+- Finalized-winner CSV export with private contacts and winning amounts
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
@@ -73,7 +73,7 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 3. Enter the product name, description, optional PNG/JPEG image (up to 4 MB), starting price, minimum increment, optional maximum increase, number of winning bidders, and three-letter currency code, then add the product to the queue. The maximum increase limits how far one bid may jump above the current highest bid; leave it blank for no limit. Repeat this for every product. The server creates a public `product-images` Supabase Storage bucket on the first upload; browser clients never receive the server key or direct upload permission. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
 4. Reorder or duplicate upcoming products as needed. Deletion is allowed only while a product is upcoming and has no registrations or bids.
 5. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot and shows everyone a synchronized five-second countdown; bids are accepted only after it reaches zero. Choose **End bidding** to close it. Both actions require confirmation. While bidding is live, every event setting is read-only. Pricing, currency, winner count, and timer rules remain immutable after the event ends; descriptive content can then be corrected again.
-6. For ended products, reconcile each winner as pending, paid, or waived and download the CSV report from **Export winners**.
+6. For ended products, review the finalized winners and download the CSV report from **Export winners**.
 
 The admin product cards and bid history show a donation total calculated in PostgreSQL. It is the sum of every accepted bid for that product, including repeated increases by the same participant. Participant emails are visible only in the protected admin bid history.
 
