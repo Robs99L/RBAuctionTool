@@ -41,3 +41,31 @@ export type BidReceipt = {
   created_at: string;
   username: string;
 };
+
+export type LeaderboardEntry = {
+  bid_id: string;
+  participant_id: string;
+  username: string;
+  amount: number;
+  created_at: string;
+  bidder_rank: number;
+  is_winner: boolean;
+  is_final: boolean;
+};
+
+export type WinnerPaymentStatus = "pending" | "paid" | "waived";
+
+export type WinnerReportEntry = {
+  auction_id: string;
+  title: string;
+  sort_order: number;
+  winner_rank: number;
+  participant_id: string;
+  username: string;
+  email: string;
+  winning_amount: number;
+  currency: string;
+  finalized_at: string;
+  payment_status: WinnerPaymentStatus;
+  paid_at: string | null;
+};

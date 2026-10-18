@@ -8,8 +8,10 @@ import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png
 import { AuctionTimer } from "@/components/auction-timer";
 import { RbLogo } from "@/components/rb-logo";
 import { selectCurrentAuction } from "@/lib/auction-queue";
+import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { maximumNextBid, minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
+import { browserDemoMode } from "@/lib/deployment-mode";
 import { formatMoney, formatTime } from "@/lib/format";
 import { normalizeParticipantProfile } from "@/lib/participant-profile";
 import { continueParticipantAcrossLots } from "@/lib/participant-session";
@@ -29,7 +31,13 @@ import {
   saveDemoParticipantId,
   type DemoAuctionState,
 } from "@/lib/demo-auction";
-import type { Auction, AuctionStatus, Bid, Participant } from "@/lib/types";
+import type {
+  Auction,
+  AuctionStatus,
+  Bid,
+  LeaderboardEntry,
+  Participant,
+} from "@/lib/types";
 
 type ConnectionState = "connecting" | "live" | "offline";
 
@@ -52,6 +60,38 @@ function participantName(value: unknown) {
   return (value as { username?: string } | null)?.username;
 }
 
+function normalizeLeaderboard(rows: Array<Record<string, unknown>> = []): LeaderboardEntry[] {
+  return rows.map((row) => ({
+    bid_id: String(row.bid_id),
+    participant_id: String(row.participant_id),
+    username: String(row.username ?? "Unknown participant"),
+    amount: Number(row.amount),
+    created_at: String(row.created_at),
+    bidder_rank: Number(row.bidder_rank),
+    is_winner: Boolean(row.is_winner),
+    is_final: Boolean(row.is_final),
+  }));
+}
+
+function auctionError(error: unknown, fallback: string) {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error && "message" in error
+      ? String(error.message)
+      : "";
+  const knownMessages = [
+    "That name is already in use for this auction.",
+    "This auction is not accepting bids.",
+    "Registration is closed because this auction has ended.",
+    "Enter a valid bid with no more than two decimal places.",
+  ];
+  const known = knownMessages.find((candidate) => message.includes(candidate));
+  if (known) return known;
+  if (message.includes("minimum bid is")) return message;
+  if (message.includes("maximum bid is")) return message;
+  return fallback;
+}
+
 function effectiveStatus(auction: Auction): AuctionStatus {
   if (
     auction.status === "active" &&
@@ -63,9 +103,27 @@ function effectiveStatus(auction: Auction): AuctionStatus {
   return auction.status;
 }
 
+function useBiddingOpen(status: AuctionStatus, startsAt: string | null) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const update = () => {
+      setOpen(status === "active" && remainingAuctionStartSeconds(startsAt) === 0);
+    };
+    const initialUpdate = window.setTimeout(update, 0);
+    const interval = window.setInterval(update, 100);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(interval);
+    };
+  }, [startsAt, status]);
+
+  return open && status === "active" && remainingAuctionStartSeconds(startsAt) === 0;
+}
+
 export function AuctionApp() {
   const configured = hasSupabaseBrowserConfig();
-  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true" || !configured;
+  const demoMode = browserDemoMode(configured);
   const client = useMemo(
     () => (configured && !demoMode ? getSupabaseBrowserClient() : null),
     [configured, demoMode],
@@ -73,6 +131,7 @@ export function AuctionApp() {
   const [auction, setAuction] = useState<Auction | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [participantCount, setParticipantCount] = useState(0);
   const [loading, setLoading] = useState(configured && !demoMode);
   const [restoredAuctionId, setRestoredAuctionId] = useState<string | null>(null);
@@ -93,7 +152,7 @@ export function AuctionApp() {
 
   const refreshDashboard = useCallback(async () => {
     if (!client || !auctionId) return;
-    const [bidResult, countResult, auctionResult] = await Promise.all([
+    const [bidResult, countResult, auctionResult, leaderboardResult] = await Promise.all([
       client
         .from("bids")
         .select("id, auction_id, participant_id, amount, created_at, participants(username)")
@@ -105,11 +164,13 @@ export function AuctionApp() {
         .select("id", { count: "exact", head: true })
         .eq("auction_id", auctionId),
       client.from("auctions").select("*").eq("id", auctionId).single(),
+      client.rpc("get_auction_leaderboard", { p_auction_id: auctionId }),
     ]);
 
     if (bidResult.error) throw bidResult.error;
     if (countResult.error) throw countResult.error;
     if (auctionResult.error) throw auctionResult.error;
+    if (leaderboardResult.error) throw leaderboardResult.error;
 
     const normalized = (bidResult.data ?? []).map((row) => ({
       id: row.id,
@@ -120,6 +181,7 @@ export function AuctionApp() {
       username: participantName(row.participants) ?? "Unknown participant",
     }));
     setBids(normalized);
+    setLeaderboard(normalizeLeaderboard(leaderboardResult.data));
     setParticipantCount(countResult.count ?? 0);
     setAuction(normalizeAuction(auctionResult.data));
   }, [auctionId, client]);
@@ -145,7 +207,7 @@ export function AuctionApp() {
       ) {
         return existingParticipant;
       }
-      throw joinError;
+      throw new Error(auctionError(joinError, "Could not join the auction."));
     }
     if (!data?.[0]) throw new Error("The auction could not be joined.");
     return data[0] as Participant;
@@ -157,7 +219,7 @@ export function AuctionApp() {
       p_auction_id: auctionId,
       p_amount: amount,
     });
-    if (bidError) throw bidError;
+    if (bidError) throw new Error(auctionError(bidError, "Your bid could not be accepted."));
     return Number(data?.[0]?.amount ?? amount);
   }, [auctionId, client]);
 
@@ -210,6 +272,7 @@ export function AuctionApp() {
     async function restoreParticipant() {
       setParticipant(null);
       setBids([]);
+      setLeaderboard([]);
       setParticipantCount(0);
       try {
         const session = await getVerifiedSupabaseSession(client!);
@@ -221,6 +284,10 @@ export function AuctionApp() {
         if (!active) return;
 
         const currentParticipant = data?.[0] ? data[0] as Participant : null;
+        if (!currentParticipant && auction?.status === "ended") {
+          setParticipant(null);
+          return;
+        }
         let previousIdentity: { username: string; email: string } | null = null;
         if (!currentParticipant?.email) {
           const { data: identityData, error: identityError } = await client!.rpc(
@@ -257,7 +324,7 @@ export function AuctionApp() {
     return () => {
       active = false;
     };
-  }, [auctionId, client, joinAuction]);
+  }, [auction?.status, auctionId, client, joinAuction]);
 
   useEffect(() => {
     if (!client || !auctionId) return;
@@ -301,6 +368,7 @@ export function AuctionApp() {
   }, [auctionId, client, refreshDashboard]);
 
   if (demoMode) return <DemoAuctionApp />;
+  if (!configured) return <ConfigurationScreen />;
   if (loading) return <LoadingScreen />;
   if (error && !auction) return <ErrorScreen message={error} />;
   if (!auction) return <NoAuction />;
@@ -311,17 +379,18 @@ export function AuctionApp() {
   return (
     <main className="min-h-screen bg-cream">
       <Header connection={connection} participantCount={participantCount} />
-      {participant ? (
+      {participant || effectiveStatus(auction) === "ended" ? (
         <AuctionRoom
           auction={auction}
           participant={participant}
           bids={bids}
+          leaderboard={leaderboard}
           connection={connection}
           onPlaceBid={placeBid}
           refreshDashboard={refreshDashboard}
         />
       ) : (
-        <JoinExperience onJoined={setParticipant} onJoin={joinAuction} />
+        <JoinExperience auction={auction} onJoined={setParticipant} onJoin={joinAuction} />
       )}
     </main>
   );
@@ -344,6 +413,20 @@ function DemoAuctionApp() {
     () => demoState?.participants ?? [],
     [demoState],
   );
+  const demoLeaderboard = useMemo<LeaderboardEntry[]>(() => {
+    if (!demoAuction) return [];
+    const ranked = selectWinningBids(demoBids, Number.MAX_SAFE_INTEGER);
+    return ranked.map((bid) => ({
+      bid_id: bid.id,
+      participant_id: bid.participant_id,
+      username: bid.username,
+      amount: bid.amount,
+      created_at: bid.created_at,
+      bidder_rank: bid.rank,
+      is_winner: bid.rank <= demoAuction.winner_count,
+      is_final: demoAuction.status === "ended",
+    }));
+  }, [demoAuction, demoBids]);
 
   useEffect(() => {
     const load = () => {
@@ -400,6 +483,9 @@ function DemoAuctionApp() {
     if (effectiveStatus(demoAuction) !== "active") {
       throw new Error("This auction is not accepting bids.");
     }
+    if (remainingAuctionStartSeconds(demoAuction.starts_at) > 0) {
+      throw new Error("Bidding opens when the start countdown reaches zero.");
+    }
     const minimum = minimumNextBid(
       demoAuction.starting_price,
       demoAuction.minimum_increment,
@@ -447,25 +533,27 @@ function DemoAuctionApp() {
   return (
     <main className="min-h-screen bg-cream">
       <div className="bg-lime px-4 py-2 text-sm text-ink sm:px-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <span><strong>Local demo</strong> · Changes are saved in this browser.</span>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 sm:gap-4">
+          <span className="min-w-0"><strong>Local demo</strong> · Changes are saved in this browser.</span>
           <button className="font-bold underline underline-offset-4" onClick={resetDemo}>
             Reset demo
           </button>
         </div>
       </div>
       <Header connection="live" participantCount={demoParticipants.length} />
-      {participant ? (
+      {participant || effectiveStatus(demoAuction) === "ended" ? (
         <AuctionRoom
           auction={demoAuction}
           participant={participant}
           bids={demoBids}
+          leaderboard={demoLeaderboard}
           connection="live"
           onPlaceBid={placeDemoBid}
           refreshDashboard={async () => undefined}
         />
       ) : (
         <JoinExperience
+          auction={demoAuction}
           onJoined={setParticipant}
           onJoin={joinDemo}
         />
@@ -507,7 +595,8 @@ function Header({
   );
 }
 
-function JoinExperience({ onJoined, onJoin }: {
+function JoinExperience({ auction, onJoined, onJoin }: {
+  auction: Auction;
   onJoined: (participant: Participant) => void;
   onJoin: (username: string, email: string) => Promise<Participant>;
 }) {
@@ -553,8 +642,15 @@ function JoinExperience({ onJoined, onJoin }: {
           <p className="mb-4 text-sm font-bold uppercase tracking-[.16em] text-forest">You’re invited</p>
           <h2 className="text-4xl font-semibold tracking-[-.045em] sm:text-5xl">Join the bidding.</h2>
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
-            Register at any time with your name and email. You stay in the auction automatically when the next product starts.
+            Register with your name and email while bidding is open. You stay in the auction automatically when the next product starts.
           </p>
+          <AuctionTimer
+            startsAt={auction.starts_at}
+            durationSeconds={auction.timer_duration_seconds}
+            status={auction.status}
+            compact
+            className="mt-6"
+          />
           <form className="mt-9 space-y-4" onSubmit={join}>
             <div>
               <label className="field-label" htmlFor="username">Full name</label>
@@ -600,10 +696,11 @@ function JoinExperience({ onJoined, onJoin }: {
   );
 }
 
-function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refreshDashboard }: {
+function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPlaceBid, refreshDashboard }: {
   auction: Auction;
-  participant: Participant;
+  participant: Participant | null;
   bids: Bid[];
+  leaderboard: LeaderboardEntry[];
   connection: ConnectionState;
   onPlaceBid: (amount: number) => Promise<number>;
   refreshDashboard: () => Promise<void>;
@@ -612,8 +709,10 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const status = effectiveStatus(auction);
+  const biddingOpen = useBiddingOpen(status, auction.starts_at);
+  const starting = status === "active" && !biddingOpen;
   const highest = bids[0];
-  const isLeadingParticipant = highest?.participant_id === participant.id;
+  const isLeadingParticipant = highest?.participant_id === participant?.id;
   const minimum = minimumNextBid(
     auction.starting_price,
     auction.minimum_increment,
@@ -625,13 +724,15 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
     auction.maximum_bid_difference,
     highest?.amount,
   );
-  const winningRanks = new Map(
-    selectWinningBids(bids, auction.winner_count).map((bid) => [bid.id, bid.rank]),
-  );
+  const personalRank = leaderboard.find((entry) => entry.participant_id === participant?.id);
 
   async function submitBid(event: FormEvent) {
     event.preventDefault();
     if (submitting) return;
+    if (!biddingOpen) {
+      setFeedback({ kind: "error", text: "Bidding opens when the start countdown reaches zero." });
+      return;
+    }
     const parsed = parseBidAmount(amount);
     if (parsed === null) {
       setFeedback({ kind: "error", text: "Enter a valid amount with no more than two decimal places." });
@@ -689,7 +790,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                 <div>
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-xs font-bold uppercase tracking-[.18em] text-forest">Current lot</p>
-                    <span className="status-pill"><span className={`status-dot ${status}`} />{status}</span>
+                    <span className="status-pill"><span className={`status-dot ${status}`} />{starting ? "starting" : status}</span>
                   </div>
                   <h1 className="mt-4 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">{auction.title}</h1>
                   <p className="mt-4 leading-7 text-ink/60">{auction.description}</p>
@@ -711,6 +812,52 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
           </section>
 
           <section className="panel p-5 sm:p-7">
+            <div className="mb-5 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">
+                  {status === "ended" ? "Final result" : "Current standings"}
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">Leaderboard</h2>
+              </div>
+              <span className="text-sm text-ink/45">One best bid per person</span>
+            </div>
+            {personalRank && (
+              <div className={`notice mb-4 ${personalRank.is_winner ? "notice-success" : "notice-info"}`} role="status">
+                You are ranked #{personalRank.bidder_rank}. {personalRank.is_winner
+                  ? status === "ended" ? "You are a winner." : "You are currently in a winning place."
+                  : status === "ended" ? "You did not finish in a winning place." : "Increase your bid to reach a winning place."}
+              </div>
+            )}
+            {leaderboard.length ? (
+              <ol className="divide-y divide-ink/10">
+                {leaderboard.map((entry) => (
+                  <li
+                    key={entry.participant_id}
+                    className={`grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
+                  >
+                    <span className={`grid h-9 w-9 place-items-center rounded-full text-sm font-bold ${entry.is_winner ? "bg-lime" : "bg-ink/5"}`}>
+                      {entry.bidder_rank}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{entry.username}</p>
+                      {entry.is_winner && (
+                        <span className="text-xs font-semibold text-forest">
+                          {status === "ended" ? "Winner" : "Winning place"}
+                        </span>
+                      )}
+                    </div>
+                    <strong className="tabular-nums">{formatMoney(entry.amount, auction.currency)}</strong>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">
+                The leaderboard will appear after the first accepted bid.
+              </div>
+            )}
+          </section>
+
+          <section className="panel p-5 sm:p-7">
             <div className="mb-5 flex items-end justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Activity</p>
@@ -720,28 +867,18 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
             </div>
             {bids.length ? (
               <ol className="divide-y divide-ink/10">
-                {bids.map((bid) => {
-                  const winningRank = winningRanks.get(bid.id);
-                  return (
+                {bids.map((bid) => (
                     <li key={bid.id} className="grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-4 first:pt-1">
-                      <span className={`grid h-9 w-9 place-items-center rounded-full text-xs font-bold ${winningRank ? "bg-lime" : "bg-ink/5"}`}>
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-ink/5 text-xs font-bold">
                         {bid.username.slice(0, 2).toUpperCase()}
                       </span>
                       <div className="min-w-0">
-                        <p className="flex min-w-0 items-center gap-2 font-semibold">
-                          <span className="truncate">{bid.username}</span>
-                          {winningRank && (
-                            <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">
-                              Winner #{winningRank}
-                            </span>
-                          )}
-                        </p>
+                        <p className="truncate font-semibold">{bid.username}</p>
                         <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
                       </div>
                       <strong className="tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
                     </li>
-                  );
-                })}
+                ))}
               </ol>
             ) : (
               <div className="rounded-2xl border border-dashed border-ink/15 px-5 py-10 text-center">
@@ -768,6 +905,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
               </div>
             </div>
 
+            {participant ? (
             <form onSubmit={submitBid} className="bg-white p-6 text-ink sm:p-8">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
@@ -792,7 +930,7 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   onChange={(event) => setAmount(event.target.value)}
                   inputMode="decimal"
                   placeholder={minimum.toFixed(2)}
-                  disabled={status !== "active" || submitting}
+                  disabled={!biddingOpen || submitting}
                   aria-describedby={isLeadingParticipant ? undefined : "bid-help"}
                 />
               </div>
@@ -801,13 +939,28 @@ function AuctionRoom({ auction, participant, bids, connection, onPlaceBid, refre
                   The database rechecks the minimum and maximum when submitted.
                 </p>
               )}
-              <button className="btn-primary mt-5 w-full" disabled={status !== "active" || submitting}>
-                {submitting ? "Checking bid…" : status === "active" ? "Place bid" : status === "ended" ? "Auction ended" : "Auction not started"}
+              <button className="btn-primary mt-5 w-full" disabled={!biddingOpen || submitting}>
+                {submitting
+                  ? "Checking bid…"
+                  : starting
+                    ? "Bidding starts shortly"
+                    : status === "active"
+                      ? "Place bid"
+                      : status === "ended"
+                        ? "Auction ended"
+                        : "Auction not started"}
               </button>
               <div className="mt-3 min-h-12" aria-live="polite">
                 {feedback && <div className={`notice ${feedback.kind === "error" ? "notice-error" : "notice-success"}`}>{feedback.text}</div>}
               </div>
             </form>
+            ) : (
+              <div className="bg-white p-6 text-ink sm:p-8">
+                <p className="text-xs font-bold uppercase tracking-[.13em] text-ink/45">Bidding closed</p>
+                <h2 className="mt-2 text-xl font-semibold">Final results are available above.</h2>
+                <p className="mt-2 text-sm leading-6 text-ink/55">No registration is required to view the completed auction.</p>
+              </div>
+            )}
           </section>
         </aside>
       </div>
@@ -840,6 +993,20 @@ function ErrorScreen({ message }: { message: string }) {
         <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">The auction could not load</h1>
         <div className="notice notice-error mt-5">{message}</div>
         <p className="mt-4 text-sm leading-6 text-ink/55">Confirm the environment variables and apply the Supabase migration.</p>
+      </section>
+    </main>
+  );
+}
+
+function ConfigurationScreen() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-cream p-5">
+      <section className="panel max-w-lg p-8">
+        <p className="text-xs font-bold uppercase tracking-[.16em] text-coral">Service unavailable</p>
+        <h1 className="mt-3 text-3xl font-semibold">Auction configuration is missing</h1>
+        <p className="mt-4 leading-7 text-ink/60">
+          This deployment cannot connect to the auction service. An administrator must configure the Supabase environment variables and redeploy.
+        </p>
       </section>
     </main>
   );

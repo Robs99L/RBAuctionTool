@@ -9,7 +9,7 @@
     "start": "node ./scripts/next-with-system-ca.mjs start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --pool=threads"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

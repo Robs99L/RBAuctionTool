@@ -1,5 +1,9 @@
-import { NextResponse } from "next/server";
-
+import {
+  crossOriginResponse,
+  isSameOriginRequest,
+  noStoreJson,
+  publicAdminError,
+} from "@/lib/admin-api";
 import { isAdminRequest } from "@/lib/admin-auth";
 import {
   productImageExtension,
@@ -12,16 +16,15 @@ import {
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
 function unauthorized() {
-  return NextResponse.json({ error: "Administrator authorization required." }, { status: 401 });
+  return noStoreJson({ error: "Administrator authorization required." }, { status: 401 });
 }
 
-function configurationError(error: unknown) {
+function adminRequestError(error: unknown, fallback: string, status = 500) {
   const details = error instanceof Error
     ? `${error.name}: ${error.message}${error.cause ? `\nCause: ${String(error.cause)}` : ""}`
     : JSON.stringify(error);
   console.error(`Admin Supabase request failed. ${details}`);
-  const message = error instanceof Error ? error.message : "Server configuration error.";
-  return NextResponse.json({ error: message }, { status: 503 });
+  return noStoreJson({ error: publicAdminError(error, fallback) }, { status });
 }
 
 function formValue(formData: FormData, name: string) {
@@ -65,19 +68,43 @@ async function removeProductImage(
   if (error) console.error(`Could not remove product image ${path}. ${error.message}`);
 }
 
+async function removeProductImageIfUnused(
+  client: ReturnType<typeof getSupabaseAdminClient>,
+  imageUrl: string | null,
+) {
+  try {
+    const path = productImagePathFromUrl(imageUrl);
+    if (!path || !imageUrl) return;
+
+    const { count, error } = await client
+      .from("auctions")
+      .select("id", { count: "exact", head: true })
+      .eq("image_url", imageUrl);
+    if (error) {
+      console.error(`Could not verify whether product image ${path} is still used. ${error.message}`);
+      return;
+    }
+    if ((count ?? 0) === 0) await removeProductImage(client, path);
+  } catch (error) {
+    console.error("Could not clean up an unused product image.", error);
+  }
+}
+
 export async function GET(request: Request) {
   if (!(await isAdminRequest())) return unauthorized();
   try {
     const client = getSupabaseAdminClient();
-    const [auctionResult, donationResult] = await Promise.all([
+    const [auctionResult, donationResult, winnerReportResult] = await Promise.all([
       client
         .from("auctions")
         .select("*")
         .order("sort_order", { ascending: true }),
       client.rpc("get_auction_donation_totals"),
+      client.rpc("get_auction_winner_report"),
     ]);
     if (auctionResult.error) throw auctionResult.error;
     if (donationResult.error) throw donationResult.error;
+    if (winnerReportResult.error) throw winnerReportResult.error;
     const auctions = auctionResult.data ?? [];
     const requestedId = new URL(request.url).searchParams.get("auctionId");
     const selected =
@@ -94,25 +121,27 @@ export async function GET(request: Request) {
       if (result.error) throw result.error;
       bids = result.data ?? [];
     }
-    return NextResponse.json({
+    return noStoreJson({
       auctions,
       auction: selected,
       bids,
       donationTotals: donationResult.data ?? [],
+      winnerReport: winnerReportResult.data ?? [],
     });
   } catch (error) {
-    return configurationError(error);
+    return adminRequestError(error, "Could not load the auction queue.");
   }
 }
 
 export async function PUT(request: Request) {
+  if (!isSameOriginRequest(request)) return crossOriginResponse();
   if (!(await isAdminRequest())) return unauthorized();
   const formData = await request.formData().catch(() => null);
-  if (!formData) return NextResponse.json({ error: "Invalid event form data." }, { status: 400 });
+  if (!formData) return noStoreJson({ error: "Invalid event form data." }, { status: 400 });
 
   const id = formValue(formData, "id").trim();
   const title = formValue(formData, "title").trim();
-  const description = formValue(formData, "description").trim().slice(0, 4000);
+  const description = formValue(formData, "description").trim();
   const startingPrice = Number(formValue(formData, "startingPrice"));
   const minimumIncrement = Number(formValue(formData, "minimumIncrement"));
   const maximumDifferenceValue = formValue(formData, "maximumDifference").trim();
@@ -125,13 +154,19 @@ export async function PUT(request: Request) {
   const imageEntry = formData.get("image");
   const imageFile = imageEntry instanceof File && imageEntry.size > 0 ? imageEntry : null;
 
+  const validMoney = (value: number, allowZero: boolean) => (
+    Number.isFinite(value) &&
+    (allowZero ? value >= 0 : value > 0) &&
+    value <= 9999999999.99 &&
+    Math.round(value * 100) / 100 === value
+  );
+
   if (
     !title ||
     title.length > 120 ||
-    !Number.isFinite(startingPrice) ||
-    startingPrice < 0 ||
-    !Number.isFinite(minimumIncrement) ||
-    minimumIncrement <= 0 ||
+    description.length > 4000 ||
+    !validMoney(startingPrice, true) ||
+    !validMoney(minimumIncrement, false) ||
     (maximumDifference !== null && (
       !Number.isFinite(maximumDifference) ||
       maximumDifference < minimumIncrement ||
@@ -146,13 +181,13 @@ export async function PUT(request: Request) {
     timerDurationSeconds > 86_400 ||
     !/^[A-Z]{3}$/.test(currency)
   ) {
-    return NextResponse.json({
+    return noStoreJson({
       error: "Check the title, prices, maximum increase, winner count, timer duration, and currency.",
     }, { status: 400 });
   }
 
   if (imageFile && imageFile.size > PRODUCT_IMAGE_MAX_BYTES) {
-    return NextResponse.json({ error: "Event images must not exceed 4 MB." }, { status: 413 });
+    return noStoreJson({ error: "Event images must not exceed 4 MB." }, { status: 413 });
   }
 
   let imageUpload: { bytes: Uint8Array; extension: "png" | "jpg" } | null = null;
@@ -160,7 +195,7 @@ export async function PUT(request: Request) {
     const bytes = new Uint8Array(await imageFile.arrayBuffer());
     const extension = productImageExtension(imageFile.type, bytes);
     if (!extension) {
-      return NextResponse.json({ error: "Event images must be valid PNG or JPEG files." }, { status: 400 });
+      return noStoreJson({ error: "Event images must be valid PNG or JPEG files." }, { status: 400 });
     }
     imageUpload = { bytes, extension };
   }
@@ -170,14 +205,45 @@ export async function PUT(request: Request) {
     const client = getSupabaseAdminClient();
     const auctionId = id || crypto.randomUUID();
     let previousImageUrl: string | null = null;
+    let existingStatus: "upcoming" | "active" | "ended" | null = null;
     if (id) {
       const { data: existingAuction, error: existingAuctionError } = await client
         .from("auctions")
-        .select("image_url")
+        .select("title,description,image_url,status,starting_price,minimum_increment,maximum_bid_difference,winner_count,timer_duration_seconds,currency")
         .eq("id", id)
         .single();
       if (existingAuctionError) throw existingAuctionError;
       previousImageUrl = existingAuction.image_url;
+      existingStatus = existingAuction.status;
+      if (
+        existingStatus === "active" &&
+        (
+          existingAuction.title !== title ||
+          existingAuction.description !== description ||
+          imageFile !== null
+        )
+      ) {
+        return noStoreJson({
+          error: "Name, description, and image cannot change while an event is live.",
+        }, { status: 409 });
+      }
+      if (
+        existingStatus !== "upcoming" &&
+        (
+          Number(existingAuction.starting_price) !== startingPrice ||
+          Number(existingAuction.minimum_increment) !== minimumIncrement ||
+          (existingAuction.maximum_bid_difference == null
+            ? maximumDifference !== null
+            : Number(existingAuction.maximum_bid_difference) !== maximumDifference) ||
+          Number(existingAuction.winner_count) !== winnerCount ||
+          Number(existingAuction.timer_duration_seconds) !== timerDurationSeconds ||
+          existingAuction.currency !== currency
+        )
+      ) {
+        return noStoreJson({
+          error: "Pricing, winner, currency, and timer rules cannot change after an event starts.",
+        }, { status: 409 });
+      }
     }
 
     let imageUrl = previousImageUrl;
@@ -195,10 +261,12 @@ export async function PUT(request: Request) {
       imageUrl = client.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(uploadedPath).data.publicUrl;
     }
 
-    const values = {
+    const contentValues = {
       title,
       description,
       image_url: imageUrl,
+    };
+    const ruleValues = {
       starting_price: startingPrice,
       minimum_increment: minimumIncrement,
       maximum_bid_difference: maximumDifference,
@@ -206,34 +274,42 @@ export async function PUT(request: Request) {
       timer_duration_seconds: timerDurationSeconds,
       currency,
     };
+    const values = existingStatus && existingStatus !== "upcoming"
+      ? contentValues
+      : { ...contentValues, ...ruleValues };
     const query = id
       ? client.from("auctions").update(values).eq("id", id).select("*").single()
       : client.from("auctions").insert({ id: auctionId, ...values, status: "upcoming" }).select("*").single();
     const { data, error } = await query;
     if (error) throw error;
 
-    const previousImagePath = productImagePathFromUrl(previousImageUrl);
-    if (uploadedPath && previousImagePath && previousImagePath !== uploadedPath) {
-      await removeProductImage(client, previousImagePath);
+    if (uploadedPath && previousImageUrl) {
+      await removeProductImageIfUnused(client, previousImageUrl);
     }
-    return NextResponse.json({ auction: data });
+    return noStoreJson({ auction: data });
   } catch (error) {
     if (uploadedPath) {
       const client = getSupabaseAdminClient();
       await removeProductImage(client, uploadedPath);
     }
-    return configurationError(error);
+    return adminRequestError(error, "Could not save the event.");
   }
 }
 
 export async function POST(request: Request) {
+  if (!isSameOriginRequest(request)) return crossOriginResponse();
   if (!(await isAdminRequest())) return unauthorized();
   const body = (await request.json().catch(() => null)) as {
     id?: string;
-    action?: "start" | "end";
+    action?: "start" | "end" | "move_up" | "move_down" | "duplicate" | "payment";
+    participantId?: string;
+    paymentStatus?: "pending" | "paid" | "waived";
   } | null;
-  if (!body?.id || !["start", "end"].includes(body.action ?? "")) {
-    return NextResponse.json({ error: "A valid auction action is required." }, { status: 400 });
+  if (
+    !body?.id ||
+    !["start", "end", "move_up", "move_down", "duplicate", "payment"].includes(body.action ?? "")
+  ) {
+    return noStoreJson({ error: "A valid auction action is required." }, { status: 400 });
   }
 
   try {
@@ -243,11 +319,38 @@ export async function POST(request: Request) {
         p_auction_id: body.id,
       });
       if (activationError) throw activationError;
-    } else {
+    } else if (body.action === "end") {
       const { error: endError } = await client.rpc("end_auction", {
         p_auction_id: body.id,
       });
       if (endError) throw endError;
+    } else if (body.action === "move_up" || body.action === "move_down") {
+      const { error: reorderError } = await client.rpc("reorder_auction", {
+        p_auction_id: body.id,
+        p_direction: body.action === "move_up" ? -1 : 1,
+      });
+      if (reorderError) throw reorderError;
+    } else if (body.action === "duplicate") {
+      const { data, error: duplicateError } = await client.rpc("duplicate_auction", {
+        p_auction_id: body.id,
+      });
+      if (duplicateError) throw duplicateError;
+      return noStoreJson({ auction: data?.[0] ?? null });
+    } else {
+      if (
+        !body.participantId ||
+        !body.paymentStatus ||
+        !["pending", "paid", "waived"].includes(body.paymentStatus)
+      ) {
+        return noStoreJson({ error: "A valid winner payment update is required." }, { status: 400 });
+      }
+      const { error: paymentError } = await client.rpc("set_auction_winner_payment", {
+        p_auction_id: body.id,
+        p_participant_id: body.participantId,
+        p_payment_status: body.paymentStatus,
+      });
+      if (paymentError) throw paymentError;
+      return noStoreJson({ ok: true });
     }
     const { data, error } = await client
       .from("auctions")
@@ -255,8 +358,38 @@ export async function POST(request: Request) {
       .eq("id", body.id)
       .single();
     if (error) throw error;
-    return NextResponse.json({ auction: data });
+    return noStoreJson({ auction: data });
   } catch (error) {
-    return configurationError(error);
+    return adminRequestError(error, "Could not update the auction event.", 409);
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!isSameOriginRequest(request)) return crossOriginResponse();
+  if (!(await isAdminRequest())) return unauthorized();
+  const body = (await request.json().catch(() => null)) as { id?: string } | null;
+  if (!body?.id) {
+    return noStoreJson({ error: "An auction event is required." }, { status: 400 });
+  }
+
+  try {
+    const client = getSupabaseAdminClient();
+    const { data: existing, error: existingError } = await client
+      .from("auctions")
+      .select("image_url")
+      .eq("id", body.id)
+      .single();
+    if (existingError) throw existingError;
+
+    const { error: deleteError } = await client.rpc("delete_upcoming_auction", {
+      p_auction_id: body.id,
+    });
+    if (deleteError) throw deleteError;
+
+    await removeProductImageIfUnused(client, existing.image_url);
+
+    return noStoreJson({ ok: true });
+  } catch (error) {
+    return adminRequestError(error, "Could not delete the auction event.", 409);
   }
 }

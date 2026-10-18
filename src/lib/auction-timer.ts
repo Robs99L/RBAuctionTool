@@ -1,4 +1,15 @@
 export const DEFAULT_AUCTION_TIMER_SECONDS = 2 * 60;
+export const AUCTION_START_COUNTDOWN_SECONDS = 5;
+
+export function remainingAuctionStartSeconds(
+  startsAt: string | null,
+  now = Date.now(),
+) {
+  if (!startsAt) return 0;
+  const start = Date.parse(startsAt);
+  if (!Number.isFinite(start)) return 0;
+  return Math.max(0, Math.ceil((start - now) / 1000));
+}
 
 export function remainingAuctionSeconds(
   startsAt: string | null,

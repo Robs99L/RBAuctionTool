@@ -4,6 +4,7 @@ import {
   DEFAULT_AUCTION_TIMER_SECONDS,
   formatAuctionTimer,
   remainingAuctionSeconds,
+  remainingAuctionStartSeconds,
 } from "./auction-timer";
 
 describe("remainingAuctionSeconds", () => {
@@ -24,6 +25,22 @@ describe("remainingAuctionSeconds", () => {
   it("stops at zero without changing auction state", () => {
     expect(remainingAuctionSeconds(startedAt, DEFAULT_AUCTION_TIMER_SECONDS, start + 120_000)).toBe(0);
     expect(remainingAuctionSeconds(startedAt, DEFAULT_AUCTION_TIMER_SECONDS, start + 10 * 60_000)).toBe(0);
+  });
+});
+
+describe("remainingAuctionStartSeconds", () => {
+  const startsAt = "2026-10-15T20:00:05.000Z";
+  const scheduledStart = Date.parse(startsAt);
+
+  it("counts down to the scheduled server start", () => {
+    expect(remainingAuctionStartSeconds(startsAt, scheduledStart - 5_000)).toBe(5);
+    expect(remainingAuctionStartSeconds(startsAt, scheduledStart - 1)).toBe(1);
+  });
+
+  it("stays at zero once bidding opens", () => {
+    expect(remainingAuctionStartSeconds(startsAt, scheduledStart)).toBe(0);
+    expect(remainingAuctionStartSeconds(startsAt, scheduledStart + 10_000)).toBe(0);
+    expect(remainingAuctionStartSeconds(null, scheduledStart)).toBe(0);
   });
 });
 

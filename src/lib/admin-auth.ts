@@ -1,18 +1,17 @@
 import "server-only";
 
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+
+import {
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+} from "@/lib/admin-session-token";
 
 export const ADMIN_COOKIE = "auction_admin";
 
 function configuredSecret() {
   return process.env.ADMIN_SECRET ?? "";
-}
-
-function tokenFor(secret: string) {
-  return createHmac("sha256", secret)
-    .update("live-auction-admin-v1")
-    .digest("hex");
 }
 
 export function adminIsConfigured() {
@@ -33,16 +32,12 @@ export function secretIsValid(candidate: string) {
 
 export function adminCookieValue() {
   const secret = configuredSecret();
-  if (secret.length < 16) throw new Error("ADMIN_SECRET must be at least 16 characters.");
-  return tokenFor(secret);
+  return createAdminSessionToken(secret);
 }
 
 export async function isAdminRequest() {
   const cookieStore = await cookies();
   const actual = cookieStore.get(ADMIN_COOKIE)?.value ?? "";
   const secret = configuredSecret();
-  if (!actual || secret.length < 16) return false;
-  const expected = tokenFor(secret);
-  if (actual.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+  return verifyAdminSessionToken(actual, secret);
 }

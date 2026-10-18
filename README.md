@@ -7,10 +7,13 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Anonymous participant sessions persisted across every product lot by the Supabase browser client
 - Duplicate display-name prevention per product lot
 - Realtime bid history, highest bid, leading participant, and connection state
-- A two-minute visual countdown that starts with each product's bidding phase and remains display-only; closing stays a manual administrator action
+- Database-ranked leaderboard with one best bid per participant, personal rank, and final winner state
+- A synchronized five-second public start countdown before bidding opens, followed by a configurable visual auction timer that remains display-only; closing stays a manual administrator action
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
 - Protected `/admin` page for creating/editing, starting, and ending an auction, uploading product images, configuring how many distinct highest bidders win, and viewing ranked bid history
+- Queue reordering, safe duplication/deletion, explicit start/end confirmations, Realtime admin refresh with a polling fallback, and an append-only change audit
+- Finalized-winner CSV export with private contacts, winning amounts, and payment reconciliation status
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
@@ -26,7 +29,7 @@ npm run dev
 
 Open `http://localhost:3000`. Administration is at `http://localhost:3000/admin`.
 
-When no Supabase environment variables are configured, the app automatically starts in local demo mode. It includes a live sample lot, participants, bids, working bid submission, and an editable administration page. Demo changes are stored in the browser and can be reset from either page.
+In development, missing Supabase environment variables automatically enable local demo mode. It includes a live sample lot, participants, bids, working bid submission, and an editable administration page. Demo changes are stored in the browser and can be reset from either page. Production fails closed with a configuration screen unless `NEXT_PUBLIC_DEMO_MODE=true` is set intentionally.
 
 Set `NEXT_PUBLIC_DEMO_MODE=true` to force the local demo while keeping Supabase credentials in `.env.local`.
 
@@ -48,7 +51,7 @@ supabase db seed  # optional preview data
 
 Alternatively, paste each migration into **SQL Editor** and run them in filename order. The migrations create the tables, queue order, constraints, RLS policies, RPC functions, grants, indexes, and Realtime publication entries. No additional Realtime policy step is required. In **Database → Pipelines**, verify `auctions`, `bids`, and `participants` appear in the `supabase_realtime` publication.
 
-The migration grants public read access only to auction display data, participant names, and accepted bids. Email addresses live in a private schema and are available only through service-role admin reporting. Browser roles cannot insert/update/delete auction data directly. `join_auction_with_contact`, `get_my_participant_with_contact`, `get_my_auction_identity_with_contact`, and `place_bid` are the participant RPCs used by the current client, and they are available only to authenticated users. After joining once, the browser reuses the verified anonymous session, name, and email to enter each following product lot automatically.
+The migrations grant public read access only to auction display data, participant names, accepted bids, and the controlled leaderboard RPC. Email addresses, login throttling records, audit entries, and payment reconciliation live in the private schema. Browser roles cannot insert/update/delete auction data directly. `join_auction_with_contact`, `get_my_participant_with_contact`, `get_my_auction_identity_with_contact`, and `place_bid` are the participant RPCs used by the current client, and they are available only to authenticated users. After joining once, the browser reuses the verified anonymous session, name, and email to enter each following product lot automatically.
 
 ## Environment variables
 
@@ -66,14 +69,18 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 ## Create and run the product queue
 
 1. Start the app and visit `/admin`.
-2. Enter the value configured as `ADMIN_SECRET`. A secure, HTTP-only, same-site cookie is issued for eight hours.
+2. Enter the value configured as `ADMIN_SECRET`. A randomized, signed, HTTP-only, same-site cookie is issued for eight hours. Five failed attempts from one address trigger a 15-minute database-backed block.
 3. Enter the product name, description, optional PNG/JPEG image (up to 4 MB), starting price, minimum increment, optional maximum increase, number of winning bidders, and three-letter currency code, then add the product to the queue. The maximum increase limits how far one bid may jump above the current highest bid; leave it blank for no limit. Repeat this for every product. The server creates a public `product-images` Supabase Storage bucket on the first upload; browser clients never receive the server key or direct upload permission. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
-4. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot. Choose **End bidding** to close it. These actions are checked again by the server route; hiding or showing the controls is not the authorization boundary.
+4. Reorder or duplicate upcoming products as needed. Deletion is allowed only while a product is upcoming and has no registrations or bids.
+5. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot and shows everyone a synchronized five-second countdown; bids are accepted only after it reaches zero. Choose **End bidding** to close it. Both actions require confirmation. While bidding is live, every event setting is read-only. Pricing, currency, winner count, and timer rules remain immutable after the event ends; descriptive content can then be corrected again.
+6. For ended products, reconcile each winner as pending, paid, or waived and download the CSV report from **Export winners**.
 
 The admin product cards and bid history show a donation total calculated in PostgreSQL. It is the sum of every accepted bid for that product, including repeated increases by the same participant. Participant emails are visible only in the protected admin bid history.
 
 The first acceptable bid is `starting price + minimum increment`. Every later bid from a participant who is not leading must be at least `current highest bid + minimum increment`; the current leader may raise their own bid by one cent or more. If a maximum increase is configured, no bid may exceed `current highest bid + maximum increase` (or `starting price + maximum increase` for the first bid).
-The visible timer counts down from two minutes using the product's server-recorded start time. Reaching `00:00` does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**.
+The public start countdown and the following auction timer both use the product's server-recorded start time. Reaching `00:00` on the auction timer does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**.
+
+After an event ends, its final leaderboard remains publicly visible without requiring registration. The recent activity feed stays limited to 30 bids, while rank and winner status come from the complete database leaderboard.
 
 ## Test two participants
 

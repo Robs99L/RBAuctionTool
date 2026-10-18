@@ -1,11 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
 import { orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
+import { AUCTION_START_COUNTDOWN_SECONDS } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { summarizeDonations, type DonationTotal } from "@/lib/donation-summary";
+import { browserDemoMode } from "@/lib/deployment-mode";
 import {
   clearDemoParticipantId,
   createDemoAuctionState,
@@ -15,7 +17,12 @@ import {
   type DemoAuctionState,
 } from "@/lib/demo-auction";
 import { formatMoney, formatTime } from "@/lib/format";
-import type { Auction } from "@/lib/types";
+import { getSupabaseBrowserClient, hasSupabaseBrowserConfig } from "@/lib/supabase-browser";
+import type {
+  Auction,
+  WinnerPaymentStatus,
+  WinnerReportEntry,
+} from "@/lib/types";
 
 type AdminBid = {
   id: string;
@@ -108,6 +115,23 @@ function mapDonationTotals(rows: Array<Record<string, unknown>> = []): DonationT
   }));
 }
 
+function mapWinnerReport(rows: Array<Record<string, unknown>> = []): WinnerReportEntry[] {
+  return rows.map((row) => ({
+    auction_id: String(row.auction_id),
+    title: String(row.title),
+    sort_order: Number(row.sort_order),
+    winner_rank: Number(row.winner_rank),
+    participant_id: String(row.participant_id),
+    username: String(row.username),
+    email: String(row.email ?? ""),
+    winning_amount: Number(row.winning_amount),
+    currency: String(row.currency),
+    finalized_at: String(row.finalized_at),
+    payment_status: String(row.payment_status) as WinnerPaymentStatus,
+    paid_at: row.paid_at ? String(row.paid_at) : null,
+  }));
+}
+
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -118,11 +142,11 @@ function fileAsDataUrl(file: File) {
 }
 
 export function AdminPanel() {
-  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true" || !(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  );
-  return demoMode ? <DemoAuctionEditor /> : <ConnectedAdminPanel />;
+  const configured = hasSupabaseBrowserConfig();
+  const demoMode = browserDemoMode(configured);
+  if (demoMode) return <DemoAuctionEditor />;
+  if (!configured) return <AdminNotConfigured />;
+  return <ConnectedAdminPanel />;
 }
 
 function ConnectedAdminPanel() {
@@ -202,12 +226,17 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   const [auction, setAuction] = useState<Auction | null>(null);
   const [bids, setBids] = useState<AdminBid[]>([]);
   const [donationTotals, setDonationTotals] = useState<DonationTotal[]>([]);
+  const [winnerReport, setWinnerReport] = useState<WinnerReportEntry[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
+  const selectedAuctionIdRef = useRef<string | null>(null);
+  const loadRequestRef = useRef(0);
 
-  const load = useCallback(async (auctionId?: string) => {
+  const load = useCallback(async (auctionId?: string, preserveForm = false) => {
+    const requestId = ++loadRequestRef.current;
+    if (auctionId && !preserveForm) selectedAuctionIdRef.current = auctionId;
     try {
       const query = auctionId ? `?auctionId=${encodeURIComponent(auctionId)}` : "";
       const response = await fetch(`/api/admin/auction${query}`, { cache: "no-store" });
@@ -216,6 +245,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         auction?: Auction | null;
         bids?: Array<Record<string, unknown>>;
         donationTotals?: Array<Record<string, unknown>>;
+        winnerReport?: Array<Record<string, unknown>>;
         error?: string;
       };
       if (response.status === 401) {
@@ -223,26 +253,47 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         return;
       }
       if (!response.ok) throw new Error(data.error ?? "Could not load the event queue.");
+      if (requestId !== loadRequestRef.current) return;
       const nextAuctions = orderAuctions((data.auctions ?? []).map(normalizedAuction));
       const selected = data.auction ? normalizedAuction(data.auction) : null;
+      selectedAuctionIdRef.current = selected?.id ?? null;
       setAuctions(nextAuctions);
       setAuction(selected);
-      setForm(selected ? formFromAuction(selected) : emptyForm);
+      if (!preserveForm) setForm(selected ? formFromAuction(selected) : emptyForm);
       setBids(mapAdminBids(data.bids));
       setDonationTotals(mapDonationTotals(data.donationTotals));
+      setWinnerReport(mapWinnerReport(data.winnerReport));
     } catch (loadError) {
+      if (requestId !== loadRequestRef.current) return;
       setMessage({
         kind: "error",
         text: loadError instanceof Error ? loadError.message : "Could not load the event queue.",
       });
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [onSignedOut]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(initialLoad);
+  }, [load]);
+
+  useEffect(() => {
+    const refresh = () => void load(selectedAuctionIdRef.current ?? undefined, true);
+    const interval = window.setInterval(refresh, 30_000);
+    const client = getSupabaseBrowserClient();
+    const channel = client
+      .channel("admin-auction-dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, refresh)
+      .subscribe();
+
+    return () => {
+      window.clearInterval(interval);
+      void client.removeChannel(channel);
+    };
   }, [load]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -281,9 +332,85 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       const data = (await response.json()) as { auction?: Auction; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Could not update the auction status.");
       await load(auction.id);
-      setMessage({ kind: "success", text: action === "start" ? "This event is now live." : "Bidding for this event has ended." });
+      setMessage({
+        kind: "success",
+        text: action === "start"
+          ? `Start countdown is running. Bidding opens in ${AUCTION_START_COUNTDOWN_SECONDS} seconds.`
+          : "Bidding for this event has ended.",
+      });
     } catch (statusError) {
       setMessage({ kind: "error", text: statusError instanceof Error ? statusError.message : "Could not update the auction status." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function queueAction(action: "move_up" | "move_down" | "duplicate") {
+    if (!auction || saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/auction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: auction.id, action }),
+      });
+      const data = (await response.json()) as { auction?: Auction; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not update the event queue.");
+      await load(data.auction?.id ?? auction.id);
+      setMessage({
+        kind: "success",
+        text: action === "duplicate" ? "A copy was added to the queue." : "Queue order updated.",
+      });
+    } catch (actionError) {
+      setMessage({ kind: "error", text: actionError instanceof Error ? actionError.message : "Could not update the event queue." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteAuction() {
+    if (!auction || saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/auction", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: auction.id }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not delete the event.");
+      await load();
+      setMessage({ kind: "success", text: "Event deleted from the queue." });
+    } catch (deleteError) {
+      setMessage({ kind: "error", text: deleteError instanceof Error ? deleteError.message : "Could not delete the event." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function changePayment(participantId: string, paymentStatus: WinnerPaymentStatus) {
+    if (!auction || saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/auction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: auction.id,
+          action: "payment",
+          participantId,
+          paymentStatus,
+        }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not update payment status.");
+      await load(auction.id, true);
+      setMessage({ kind: "success", text: "Payment status updated." });
+    } catch (paymentError) {
+      setMessage({ kind: "error", text: paymentError instanceof Error ? paymentError.message : "Could not update payment status." });
     } finally {
       setSaving(false);
     }
@@ -294,6 +421,18 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     onSignedOut();
   }
 
+  function selectAuction(id: string) {
+    selectedAuctionIdRef.current = id;
+    const selected = auctions.find((item) => item.id === id);
+    if (selected) {
+      setAuction(selected);
+      setForm(formFromAuction(selected));
+      setBids([]);
+      setMessage(null);
+    }
+    void load(id);
+  }
+
   if (loading) return <div className="panel h-[34rem] animate-pulse" />;
 
   return (
@@ -302,12 +441,15 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       auction={auction}
       bids={bids}
       donationTotals={donationTotals}
+      winnerReport={winnerReport}
       form={form}
       message={message}
       saving={saving}
       onFormChange={setForm}
-      onSelect={(id) => void load(id)}
+      onSelect={selectAuction}
       onNew={() => {
+        selectedAuctionIdRef.current = null;
+        loadRequestRef.current += 1;
         setAuction(null);
         setForm(emptyForm);
         setBids([]);
@@ -315,6 +457,9 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       }}
       onSave={save}
       onStatusChange={(action) => void changeStatus(action)}
+      onQueueAction={(action) => void queueAction(action)}
+      onDelete={() => void deleteAuction()}
+      onPaymentChange={(participantId, status) => void changePayment(participantId, status)}
       onRefresh={() => void load(auction?.id)}
       onSignOut={() => void signOut()}
     />
@@ -324,6 +469,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
 function DemoAuctionEditor() {
   const [demoState, setDemoState] = useState<DemoAuctionState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [message, setMessage] = useState<Message>(null);
 
@@ -346,6 +492,30 @@ function DemoAuctionEditor() {
     () => demoState ? summarizeDonations(demoState.auctions, demoState.bids) : [],
     [demoState],
   );
+  const winnerReport = useMemo<WinnerReportEntry[]>(() => {
+    if (!demoState) return [];
+    return orderAuctions(demoState.auctions).flatMap((item) => {
+      if (item.status !== "ended") return [];
+      const itemBids = demoState.bids.filter((bid) => bid.auction_id === item.id);
+      return selectWinningBids(itemBids, item.winner_count).map((bid) => {
+        const participant = demoState.participants.find((entry) => entry.id === bid.participant_id);
+        return {
+          auction_id: item.id,
+          title: item.title,
+          sort_order: item.sort_order,
+          winner_rank: bid.rank,
+          participant_id: bid.participant_id,
+          username: bid.username,
+          email: participant?.email ?? "",
+          winning_amount: bid.amount,
+          currency: item.currency,
+          finalized_at: item.ends_at ?? bid.created_at,
+          payment_status: "pending" as const,
+          paid_at: null,
+        };
+      });
+    });
+  }, [demoState]);
 
   const load = useCallback((preferredId?: string) => {
     const next = loadDemoAuctionState();
@@ -359,14 +529,18 @@ function DemoAuctionEditor() {
   useEffect(() => {
     const initialLoad = window.setTimeout(() => load(), 0);
     const syncAcrossTabs = (event: StorageEvent) => {
-      if (event.key === DEMO_STATE_KEY) load(selectedId ?? undefined);
+      if (event.key === DEMO_STATE_KEY) load(selectedIdRef.current ?? undefined);
     };
     window.addEventListener("storage", syncAcrossTabs);
     return () => {
       window.clearTimeout(initialLoad);
       window.removeEventListener("storage", syncAcrossTabs);
     };
-  }, [load, selectedId]);
+  }, [load]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   const commitState = useCallback((next: DemoAuctionState) => {
     setDemoState(next);
@@ -376,6 +550,10 @@ function DemoAuctionEditor() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!demoState) return;
+    if (selected?.status === "active") {
+      setMessage({ kind: "error", text: "Event settings cannot change while bidding is live." });
+      return;
+    }
     setMessage(null);
     const startingPrice = Number(form.startingPrice);
     const minimumIncrement = Number(form.minimumIncrement);
@@ -464,17 +642,25 @@ function DemoAuctionEditor() {
   function changeStatus(action: "start" | "end") {
     if (!demoState || !selected) return;
     const now = new Date().toISOString();
+    const scheduledStart = new Date(
+      Date.now() + AUCTION_START_COUNTDOWN_SECONDS * 1000,
+    ).toISOString();
     const auctions = demoState.auctions.map((item) => {
       if (action === "start" && item.status === "active" && item.id !== selected.id) {
         return { ...item, status: "ended" as const, ends_at: now };
       }
       if (item.id !== selected.id) return item;
       return action === "start"
-        ? { ...item, status: "active" as const, starts_at: now, ends_at: null }
+        ? { ...item, status: "active" as const, starts_at: scheduledStart, ends_at: null }
         : { ...item, status: "ended" as const, ends_at: now };
     });
     commitState({ ...demoState, auctions });
-    setMessage({ kind: "success", text: action === "start" ? "Demo event is now live." : "Demo bidding has ended." });
+    setMessage({
+      kind: "success",
+      text: action === "start"
+        ? `Start countdown is running. Bidding opens in ${AUCTION_START_COUNTDOWN_SECONDS} seconds.`
+        : "Demo bidding has ended.",
+    });
   }
 
   function resetDemo() {
@@ -487,6 +673,53 @@ function DemoAuctionEditor() {
     setMessage({ kind: "success", text: "Demo data reset." });
   }
 
+  function queueAction(action: "move_up" | "move_down" | "duplicate") {
+    if (!demoState || !selected) return;
+    if (action === "duplicate") {
+      const copy: Auction = {
+        ...selected,
+        id: crypto.randomUUID(),
+        title: `${selected.title} (copy)`.slice(0, 120),
+        status: "upcoming",
+        starts_at: null,
+        ends_at: null,
+        sort_order: Math.max(0, ...demoState.auctions.map((item) => item.sort_order)) + 1,
+        created_at: new Date().toISOString(),
+      };
+      commitState({ ...demoState, auctions: [...demoState.auctions, copy] });
+      setSelectedId(copy.id);
+      setForm(formFromAuction(copy));
+      setMessage({ kind: "success", text: "A demo copy was added to the queue." });
+      return;
+    }
+
+    const ordered = orderAuctions(demoState.auctions);
+    const index = ordered.findIndex((item) => item.id === selected.id);
+    const targetIndex = action === "move_up" ? index - 1 : index + 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return;
+    const currentOrder = ordered[index].sort_order;
+    ordered[index] = { ...ordered[index], sort_order: ordered[targetIndex].sort_order };
+    ordered[targetIndex] = { ...ordered[targetIndex], sort_order: currentOrder };
+    commitState({ ...demoState, auctions: ordered });
+    setMessage({ kind: "success", text: "Demo queue order updated." });
+  }
+
+  function deleteAuction() {
+    if (!demoState || !selected) return;
+    const hasActivity = demoState.participants.some((item) => item.auction_id === selected.id)
+      || demoState.bids.some((item) => item.auction_id === selected.id);
+    if (selected.status !== "upcoming" || hasActivity) {
+      setMessage({ kind: "error", text: "Only an upcoming event without registrations or bids can be deleted." });
+      return;
+    }
+    const next = { ...demoState, auctions: demoState.auctions.filter((item) => item.id !== selected.id) };
+    const current = selectCurrentAuction(next.auctions);
+    commitState(next);
+    setSelectedId(current?.id ?? null);
+    setForm(current ? formFromAuction(current) : emptyForm);
+    setMessage({ kind: "success", text: "Demo event deleted." });
+  }
+
   if (!demoState) return <div className="panel h-[34rem] animate-pulse" />;
 
   return (
@@ -495,6 +728,7 @@ function DemoAuctionEditor() {
       auction={selected}
       bids={bids}
       donationTotals={donationTotals}
+      winnerReport={winnerReport}
       form={form}
       message={message}
       saving={false}
@@ -514,6 +748,8 @@ function DemoAuctionEditor() {
       }}
       onSave={save}
       onStatusChange={changeStatus}
+      onQueueAction={queueAction}
+      onDelete={deleteAuction}
       onRefresh={() => load(selectedId ?? undefined)}
     />
   );
@@ -524,6 +760,7 @@ function AuctionManagerView({
   auction,
   bids,
   donationTotals,
+  winnerReport,
   form,
   message,
   saving,
@@ -533,6 +770,9 @@ function AuctionManagerView({
   onNew,
   onSave,
   onStatusChange,
+  onQueueAction,
+  onDelete,
+  onPaymentChange,
   onRefresh,
   onSignOut,
   onReset,
@@ -541,6 +781,7 @@ function AuctionManagerView({
   auction: Auction | null;
   bids: AdminBid[];
   donationTotals: DonationTotal[];
+  winnerReport: WinnerReportEntry[];
   form: FormState;
   message: Message;
   saving: boolean;
@@ -550,6 +791,9 @@ function AuctionManagerView({
   onNew: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onStatusChange: (action: "start" | "end") => void;
+  onQueueAction: (action: "move_up" | "move_down" | "duplicate") => void;
+  onDelete: () => void;
+  onPaymentChange?: (participantId: string, status: WinnerPaymentStatus) => void;
   onRefresh: () => void;
   onSignOut?: () => void;
   onReset?: () => void;
@@ -570,6 +814,13 @@ function AuctionManagerView({
     donationTotals.map((total) => [total.auction_id, total]),
   );
   const selectedDonationTotal = auction ? donationTotalsByAuction.get(auction.id) : undefined;
+  const selectedWinnerReport = auction
+    ? winnerReport.filter((entry) => entry.auction_id === auction.id)
+    : [];
+  const rulesLocked = Boolean(auction && auction.status !== "upcoming");
+  const contentLocked = auction?.status === "active";
+  const selectedIndex = auction ? auctions.findIndex((item) => item.id === auction.id) : -1;
+  const [confirmation, setConfirmation] = useState<"start" | "end" | "delete" | null>(null);
 
   const winningRanks = new Map(
     (auction ? selectWinningBids(bids, auction.winner_count) : [])
@@ -584,7 +835,7 @@ function AuctionManagerView({
     <div className="space-y-6">
       {demo && (
         <div className="notice notice-info flex flex-wrap items-center justify-between gap-3">
-          <span><strong>Local demo:</strong> Events and bids are stored only in this browser.</span>
+          <span className="min-w-0"><strong>Local demo:</strong> Events and bids are stored only in this browser.</span>
           <button className="font-bold underline underline-offset-4" onClick={onReset}>Reset demo</button>
         </div>
       )}
@@ -596,6 +847,7 @@ function AuctionManagerView({
             <h1 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Event queue</h1>
           </div>
           <div className="flex items-center gap-4">
+            {!demo && <a className="text-link" href="/api/admin/export">Export winners</a>}
             {onSignOut && <button className="text-link" onClick={onSignOut}>Sign out</button>}
             <button className="btn-primary" onClick={onNew}>Add event</button>
           </div>
@@ -607,7 +859,8 @@ function AuctionManagerView({
                 key={item.id}
                 type="button"
                 aria-pressed={auction?.id === item.id}
-                className={`rounded-2xl border p-4 text-left transition ${auction?.id === item.id ? "border-forest bg-forest text-white" : "border-ink/10 bg-white/70 hover:border-ink/30"}`}
+                aria-current={auction?.id === item.id ? "true" : undefined}
+                className={`cursor-pointer rounded-2xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-lime ${auction?.id === item.id ? "border-forest bg-forest text-white" : "border-ink/10 bg-white/70 hover:border-forest hover:shadow-md"}`}
                 onClick={() => onSelect(item.id)}
               >
                 <span className={`text-xs font-bold uppercase tracking-[.12em] ${auction?.id === item.id ? "text-white/55" : "text-ink/45"}`}>Event {index + 1}</span>
@@ -631,12 +884,21 @@ function AuctionManagerView({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section className="panel p-6 sm:p-8">
-          <div className="mb-7 flex items-start justify-between gap-5">
+          <div className="mb-7 flex flex-wrap items-start justify-between gap-5">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Event settings</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{auction ? "Edit event" : "Add an event"}</h2>
             </div>
-            {auction && <span className="status-pill"><span className={`status-dot ${auction.status}`} />{auction.status}</span>}
+            {auction && (
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className="btn-secondary" disabled={saving || selectedIndex <= 0} onClick={() => onQueueAction("move_up")}>Move up</button>
+                <button type="button" className="btn-secondary" disabled={saving || selectedIndex >= auctions.length - 1} onClick={() => onQueueAction("move_down")}>Move down</button>
+                <button type="button" className="btn-secondary" disabled={saving} onClick={() => onQueueAction("duplicate")}>Duplicate</button>
+                {auction.status === "upcoming" && (
+                  <button type="button" className="btn-danger" disabled={saving} onClick={() => setConfirmation("delete")}>Delete</button>
+                )}
+              </div>
+            )}
           </div>
 
           {auction && (
@@ -649,14 +911,22 @@ function AuctionManagerView({
             />
           )}
 
+          {rulesLocked && (
+            <div className="notice notice-info mb-6" role="status">
+              {contentLocked
+                ? "This event is live. All settings are locked until bidding has ended."
+                : "Auction rules stay locked after the event ends. Name, description, and image can be updated."}
+            </div>
+          )}
+
           <form key={auctionKey} onSubmit={onSave} className="space-y-5">
             <div>
               <label className="field-label" htmlFor="title">Event name</label>
-              <input id="title" name="title" className="field" value={form.title} onChange={(event) => updateField("title", event.target.value)} maxLength={120} required />
+              <input id="title" name="title" className="field" value={form.title} onChange={(event) => updateField("title", event.target.value)} readOnly={contentLocked} aria-disabled={contentLocked} maxLength={120} required />
             </div>
             <div>
               <label className="field-label" htmlFor="description">Description</label>
-              <textarea id="description" name="description" className="field min-h-32 resize-y" value={form.description} onChange={(event) => updateField("description", event.target.value)} maxLength={4000} />
+              <textarea id="description" name="description" className="field min-h-32 resize-y" value={form.description} onChange={(event) => updateField("description", event.target.value)} readOnly={contentLocked} aria-disabled={contentLocked} maxLength={4000} />
             </div>
             <div>
               <label className="field-label" htmlFor="image">Event image</label>
@@ -667,6 +937,7 @@ function AuctionManagerView({
                 type="file"
                 accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                 className="field file:mr-4 file:rounded-full file:border-0 file:bg-forest file:px-4 file:py-2 file:text-sm file:font-bold file:text-white"
+                disabled={contentLocked}
                 onChange={(event) => {
                   const file = event.target.files?.[0] ?? null;
                   const error = file && !PRODUCT_IMAGE_TYPES.includes(file.type)
@@ -695,11 +966,11 @@ function AuctionManagerView({
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="field-label" htmlFor="starting-price">Starting price</label>
-                <input id="starting-price" name="startingPrice" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} required />
+                <input id="starting-price" name="startingPrice" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} readOnly={rulesLocked} aria-disabled={rulesLocked} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="increment">Minimum step</label>
-                <input id="increment" name="minimumIncrement" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} required />
+                <input id="increment" name="minimumIncrement" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} readOnly={rulesLocked} aria-disabled={rulesLocked} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="maximum-difference">Maximum increase</label>
@@ -712,12 +983,14 @@ function AuctionManagerView({
                   className="field"
                   value={form.maximumDifference}
                   onChange={(event) => updateField("maximumDifference", event.target.value)}
+                  readOnly={rulesLocked}
+                  aria-disabled={rulesLocked}
                   placeholder="Unlimited"
                 />
               </div>
               <div>
                 <label className="field-label" htmlFor="winner-count">Winning bidders</label>
-                <input id="winner-count" name="winnerCount" type="number" min="1" max="1000" step="1" className="field" value={form.winnerCount} onChange={(event) => updateField("winnerCount", event.target.value)} required />
+                <input id="winner-count" name="winnerCount" type="number" min="1" max="1000" step="1" className="field" value={form.winnerCount} onChange={(event) => updateField("winnerCount", event.target.value)} readOnly={rulesLocked} aria-disabled={rulesLocked} required />
               </div>
               <div>
                 <label className="field-label" htmlFor="timer-duration">Timer duration (minutes)</label>
@@ -731,12 +1004,14 @@ function AuctionManagerView({
                   className="field"
                   value={form.timerDurationMinutes}
                   onChange={(event) => updateField("timerDurationMinutes", event.target.value)}
+                  readOnly={rulesLocked}
+                  aria-disabled={rulesLocked}
                   required
                 />
               </div>
               <div>
                 <label className="field-label" htmlFor="currency">Currency</label>
-                <input id="currency" name="currency" className="field uppercase" value={form.currency} onChange={(event) => updateField("currency", event.target.value.toUpperCase())} minLength={3} maxLength={3} required />
+                <input id="currency" name="currency" className="field uppercase" value={form.currency} onChange={(event) => updateField("currency", event.target.value.toUpperCase())} readOnly={rulesLocked} aria-disabled={rulesLocked} minLength={3} maxLength={3} required />
               </div>
             </div>
             <p className="text-xs leading-5 text-ink/45">
@@ -744,12 +1019,12 @@ function AuctionManagerView({
             </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
             <div className="flex flex-wrap items-center gap-3 border-t border-ink/10 pt-6">
-              <button className="btn-primary" disabled={saving}>{saving ? "Saving…" : auction ? "Save changes" : "Add to queue"}</button>
+              <button className="btn-primary" disabled={saving || contentLocked}>{saving ? "Saving…" : auction ? "Save changes" : "Add to queue"}</button>
               {auction?.status === "upcoming" && (
-                <button type="button" className="btn-secondary" disabled={saving} onClick={() => onStatusChange("start")}>Start this event</button>
+                <button type="button" className="btn-secondary" disabled={saving} onClick={() => setConfirmation("start")}>Start this event</button>
               )}
               {auction?.status === "active" && (
-                <button type="button" className="btn-danger" disabled={saving} onClick={() => onStatusChange("end")}>End bidding</button>
+                <button type="button" className="btn-danger" disabled={saving} onClick={() => setConfirmation("end")}>End bidding</button>
               )}
             </div>
           </form>
@@ -793,8 +1068,95 @@ function AuctionManagerView({
           ) : (
             <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No accepted bids for this event yet.</div>
           )}
+
+          {auction?.status === "ended" && (
+            <div className="mt-7 border-t border-ink/10 pt-6">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Settlement</p>
+                  <h3 className="mt-1 text-lg font-semibold">Winner payments</h3>
+                </div>
+                {!demo && <a className="text-link text-sm" href="/api/admin/export">CSV export</a>}
+              </div>
+              {selectedWinnerReport.length ? (
+                <ul className="mt-4 divide-y divide-ink/10">
+                  {selectedWinnerReport.map((entry) => (
+                    <li key={entry.participant_id} className="py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">#{entry.winner_rank} {entry.username}</p>
+                          <p className="truncate text-xs text-ink/45">{entry.email}</p>
+                          <p className="mt-1 text-xs font-semibold text-forest">{formatMoney(entry.winning_amount, entry.currency)}</p>
+                        </div>
+                        <select
+                          className="field w-28 py-2 text-sm"
+                          aria-label={`Payment status for ${entry.username}`}
+                          value={entry.payment_status}
+                          disabled={!onPaymentChange || saving}
+                          onChange={(event) => onPaymentChange?.(
+                            entry.participant_id,
+                            event.target.value as WinnerPaymentStatus,
+                          )}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="paid">Paid</option>
+                          <option value="waived">Waived</option>
+                        </select>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-4 text-sm text-ink/50">This event ended without a winning bid.</p>
+              )}
+            </div>
+          )}
         </aside>
       </div>
+
+      {confirmation && auction && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-4"
+          role="presentation"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setConfirmation(null);
+          }}
+        >
+          <section
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-2xl"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirmation-title"
+            aria-describedby="confirmation-description"
+          >
+            <h2 id="confirmation-title" className="text-xl font-semibold">
+              {confirmation === "start" ? "Start this event?" : confirmation === "end" ? "End bidding now?" : "Delete this event?"}
+            </h2>
+            <p id="confirmation-description" className="mt-3 leading-6 text-ink/60">
+              {confirmation === "start"
+                ? `Starting this event ends any currently active event, locks its auction rules, and begins a public ${AUCTION_START_COUNTDOWN_SECONDS}-second countdown before bidding opens.`
+                : confirmation === "end"
+                  ? "The final winners will be recorded immediately. This action cannot be reversed."
+                  : "Only an upcoming event without registrations or bids can be deleted."}
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" className="btn-secondary" autoFocus onClick={() => setConfirmation(null)}>Cancel</button>
+              <button
+                type="button"
+                className={confirmation === "start" ? "btn-primary" : "btn-danger"}
+                onClick={() => {
+                  const action = confirmation;
+                  setConfirmation(null);
+                  if (action === "delete") onDelete();
+                  else onStatusChange(action);
+                }}
+              >
+                {confirmation === "start" ? "Start event" : confirmation === "end" ? "End bidding" : "Delete event"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
