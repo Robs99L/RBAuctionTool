@@ -13,6 +13,7 @@ import {
   PRODUCT_IMAGE_MIME_TYPES,
   type ProductImageMimeType,
 } from "@/lib/product-image";
+import { validateAuctionInput } from "@/lib/auction-input";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
 function unauthorized() {
@@ -140,51 +141,31 @@ export async function PUT(request: Request) {
   if (!formData) return noStoreJson({ error: "Invalid event form data." }, { status: 400 });
 
   const id = formValue(formData, "id").trim();
-  const title = formValue(formData, "title").trim();
-  const description = formValue(formData, "description").trim();
-  const startingPrice = Number(formValue(formData, "startingPrice"));
-  const minimumIncrement = Number(formValue(formData, "minimumIncrement"));
-  const maximumDifferenceValue = formValue(formData, "maximumDifference").trim();
-  const maximumDifference = maximumDifferenceValue === ""
-    ? null
-    : Number(maximumDifferenceValue);
-  const winnerCount = Number(formValue(formData, "winnerCount"));
-  const timerDurationSeconds = Number(formValue(formData, "timerDurationMinutes")) * 60;
-  const currency = formValue(formData, "currency").trim().toUpperCase();
+  const validation = validateAuctionInput({
+    title: formValue(formData, "title"),
+    description: formValue(formData, "description"),
+    startingPrice: formValue(formData, "startingPrice"),
+    minimumIncrement: formValue(formData, "minimumIncrement"),
+    maximumDifference: formValue(formData, "maximumDifference"),
+    winnerCount: formValue(formData, "winnerCount"),
+    timerDurationMinutes: formValue(formData, "timerDurationMinutes"),
+    currency: formValue(formData, "currency"),
+  });
+  if (!validation.ok) {
+    return noStoreJson({ error: validation.errors.join(" ") }, { status: 400 });
+  }
+  const {
+    title,
+    description,
+    starting_price: startingPrice,
+    minimum_increment: minimumIncrement,
+    maximum_bid_difference: maximumDifference,
+    winner_count: winnerCount,
+    timer_duration_seconds: timerDurationSeconds,
+    currency,
+  } = validation.value;
   const imageEntry = formData.get("image");
   const imageFile = imageEntry instanceof File && imageEntry.size > 0 ? imageEntry : null;
-
-  const validMoney = (value: number, allowZero: boolean) => (
-    Number.isFinite(value) &&
-    (allowZero ? value >= 0 : value > 0) &&
-    value <= 9999999999.99 &&
-    Math.round(value * 100) / 100 === value
-  );
-
-  if (
-    !title ||
-    title.length > 120 ||
-    description.length > 4000 ||
-    !validMoney(startingPrice, true) ||
-    !validMoney(minimumIncrement, false) ||
-    (maximumDifference !== null && (
-      !Number.isFinite(maximumDifference) ||
-      maximumDifference < minimumIncrement ||
-      maximumDifference > 9999999999.99 ||
-      Math.round(maximumDifference * 100) / 100 !== maximumDifference
-    )) ||
-    !Number.isSafeInteger(winnerCount) ||
-    winnerCount < 1 ||
-    winnerCount > 1000 ||
-    !Number.isSafeInteger(timerDurationSeconds) ||
-    timerDurationSeconds < 30 ||
-    timerDurationSeconds > 86_400 ||
-    !/^[A-Z]{3}$/.test(currency)
-  ) {
-    return noStoreJson({
-      error: "Check the title, prices, maximum increase, winner count, timer duration, and currency.",
-    }, { status: 400 });
-  }
 
   if (imageFile && imageFile.size > PRODUCT_IMAGE_MAX_BYTES) {
     return noStoreJson({ error: "Event images must not exceed 4 MB." }, { status: 413 });
@@ -330,6 +311,15 @@ export async function POST(request: Request) {
         p_direction: body.action === "move_up" ? -1 : 1,
       });
       if (reorderError) throw reorderError;
+      const { data: auctions, error: queueError } = await client
+        .from("auctions")
+        .select("*")
+        .order("sort_order", { ascending: true });
+      if (queueError) throw queueError;
+      return noStoreJson({
+        auction: auctions.find((item) => item.id === body.id) ?? null,
+        auctions,
+      });
     } else if (body.action === "duplicate") {
       const { data, error: duplicateError } = await client.rpc("duplicate_auction", {
         p_auction_id: body.id,

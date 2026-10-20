@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  moveAuctionInQueue,
   selectCurrentAuction,
   selectNextAuction,
   selectParticipantAuction,
@@ -28,6 +29,29 @@ function lot(id: string, sortOrder: number, status: Auction["status"]): Auction 
 }
 
 describe("auction queue", () => {
+  it("moves an auction by swapping its stable queue position", () => {
+    const auctions = [
+      lot("first", 10, "upcoming"),
+      lot("second", 20, "upcoming"),
+      lot("third", 30, "upcoming"),
+    ];
+
+    const moved = moveAuctionInQueue(auctions, "second", -1);
+
+    expect(moved.map((auction) => auction.id)).toEqual(["second", "first", "third"]);
+    expect(moved.map((auction) => auction.sort_order)).toEqual([10, 20, 30]);
+    expect(auctions.map((auction) => auction.id)).toEqual(["first", "second", "third"]);
+  });
+
+  it("keeps the queue unchanged at its boundaries", () => {
+    const auctions = [lot("first", 1, "upcoming"), lot("second", 2, "upcoming")];
+
+    expect(moveAuctionInQueue(auctions, "first", -1).map((auction) => auction.id))
+      .toEqual(["first", "second"]);
+    expect(moveAuctionInQueue(auctions, "second", 1).map((auction) => auction.id))
+      .toEqual(["first", "second"]);
+  });
+
   it("prefers the active lot regardless of its position", () => {
     expect(selectCurrentAuction([
       lot("next", 2, "upcoming"),

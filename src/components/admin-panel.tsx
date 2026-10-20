@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
-import { orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
+import { moveAuctionInQueue, orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
 import { AUCTION_START_COUNTDOWN_SECONDS } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { summarizeDonations, type DonationTotal } from "@/lib/donation-summary";
@@ -232,6 +232,8 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   const [message, setMessage] = useState<Message>(null);
   const selectedAuctionIdRef = useRef<string | null>(null);
   const loadRequestRef = useRef(0);
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const suppressAuctionRefreshUntilRef = useRef(0);
 
   const load = useCallback(async (auctionId?: string, preserveForm = false) => {
     const requestId = ++loadRequestRef.current;
@@ -279,8 +281,20 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   }, [load]);
 
   useEffect(() => {
-    const refresh = () => void load(selectedAuctionIdRef.current ?? undefined, true);
-    const interval = window.setInterval(refresh, 30_000);
+    const refresh = () => {
+      if (Date.now() < suppressAuctionRefreshUntilRef.current) return;
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+      }
+      realtimeRefreshTimerRef.current = window.setTimeout(() => {
+        realtimeRefreshTimerRef.current = null;
+        void load(selectedAuctionIdRef.current ?? undefined, true);
+      }, 400);
+    };
+    const interval = window.setInterval(
+      () => void load(selectedAuctionIdRef.current ?? undefined, true),
+      30_000,
+    );
     const client = getSupabaseBrowserClient();
     const channel = client
       .channel("admin-auction-dashboard")
@@ -291,6 +305,10 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
 
     return () => {
       window.clearInterval(interval);
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
       void client.removeChannel(channel);
     };
   }, [load]);
@@ -313,6 +331,48 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       setMessage({ kind: "success", text: creating ? "Event added to the queue." : "Event details saved." });
     } catch (saveError) {
       setMessage({ kind: "error", text: saveError instanceof Error ? saveError.message : "Could not save the event." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function importEvents(file: File) {
+    if (saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = new FormData();
+      payload.set("file", file);
+      const response = await fetch("/api/admin/auction-import", {
+        method: "POST",
+        body: payload,
+      });
+      const data = (await response.json()) as {
+        imported?: number;
+        auctions?: Auction[];
+        error?: string;
+        rowErrors?: string[];
+      };
+      if (response.status === 401) {
+        onSignedOut();
+        return;
+      }
+      if (!response.ok) {
+        const details = data.rowErrors?.length ? ` ${data.rowErrors.join(" ")}` : "";
+        throw new Error(`${data.error ?? "Could not import the events."}${details}`);
+      }
+      const firstImportedId = data.auctions?.[0]?.id;
+      await load(firstImportedId);
+      const imported = data.imported ?? 0;
+      setMessage({
+        kind: "success",
+        text: `${imported} event${imported === 1 ? "" : "s"} imported and added to the queue.`,
+      });
+    } catch (importError) {
+      setMessage({
+        kind: "error",
+        text: importError instanceof Error ? importError.message : "Could not import the events.",
+      });
     } finally {
       setSaving(false);
     }
@@ -346,6 +406,23 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
 
   async function queueAction(action: "move_up" | "move_down" | "duplicate") {
     if (!auction || saving) return;
+    const isMove = action === "move_up" || action === "move_down";
+    const previousAuctions = auctions;
+    const previousAuction = auction;
+    if (isMove) {
+      suppressAuctionRefreshUntilRef.current = Number.POSITIVE_INFINITY;
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      const optimisticAuctions = moveAuctionInQueue(
+        auctions,
+        auction.id,
+        action === "move_up" ? -1 : 1,
+      );
+      setAuctions(optimisticAuctions);
+      setAuction(optimisticAuctions.find((item) => item.id === auction.id) ?? auction);
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -354,16 +431,31 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: auction.id, action }),
       });
-      const data = (await response.json()) as { auction?: Auction; error?: string };
+      const data = (await response.json()) as {
+        auction?: Auction;
+        auctions?: Auction[];
+        error?: string;
+      };
       if (!response.ok) throw new Error(data.error ?? "Could not update the event queue.");
-      await load(data.auction?.id ?? auction.id);
+      if (isMove && data.auctions) {
+        const canonicalAuctions = orderAuctions(data.auctions.map(normalizedAuction));
+        setAuctions(canonicalAuctions);
+        setAuction(canonicalAuctions.find((item) => item.id === auction.id) ?? auction);
+      } else {
+        await load(data.auction?.id ?? auction.id);
+      }
       setMessage({
         kind: "success",
         text: action === "duplicate" ? "A copy was added to the queue." : "Queue order updated.",
       });
     } catch (actionError) {
+      if (isMove) {
+        setAuctions(previousAuctions);
+        setAuction(previousAuction);
+      }
       setMessage({ kind: "error", text: actionError instanceof Error ? actionError.message : "Could not update the event queue." });
     } finally {
+      if (isMove) suppressAuctionRefreshUntilRef.current = Date.now() + 750;
       setSaving(false);
     }
   }
@@ -432,6 +524,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       onStatusChange={(action) => void changeStatus(action)}
       onQueueAction={(action) => void queueAction(action)}
       onDelete={() => void deleteAuction()}
+      onImport={(file) => void importEvents(file)}
       onRefresh={() => void load(auction?.id)}
       onSignOut={() => void signOut()}
     />
@@ -744,6 +837,7 @@ function AuctionManagerView({
   onStatusChange,
   onQueueAction,
   onDelete,
+  onImport,
   onRefresh,
   onSignOut,
   onReset,
@@ -764,6 +858,7 @@ function AuctionManagerView({
   onStatusChange: (action: "start" | "end") => void;
   onQueueAction: (action: "move_up" | "move_down" | "duplicate") => void;
   onDelete: () => void;
+  onImport?: (file: File) => void;
   onRefresh: () => void;
   onSignOut?: () => void;
   onReset?: () => void;
@@ -817,6 +912,23 @@ function AuctionManagerView({
             <h1 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Event queue</h1>
           </div>
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 sm:w-auto sm:justify-end">
+            {!demo && <a className="text-link inline-flex min-h-11 items-center" href="/api/admin/auction-import">Download Excel template</a>}
+            {!demo && onImport && (
+              <label className={`text-link inline-flex min-h-11 cursor-pointer items-center ${saving ? "pointer-events-none opacity-50" : ""}`}>
+                {saving ? "Working…" : "Import Excel"}
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="sr-only"
+                  disabled={saving}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0] ?? null;
+                    event.currentTarget.value = "";
+                    if (file) onImport(file);
+                  }}
+                />
+              </label>
+            )}
             {!demo && <a className="text-link inline-flex min-h-11 items-center" href="/api/admin/export">Export winners</a>}
             {onSignOut && <button className="text-link min-h-11" onClick={onSignOut}>Sign out</button>}
             <button className="btn-primary w-full sm:w-auto" onClick={onNew}>Add event</button>
