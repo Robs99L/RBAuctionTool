@@ -21,6 +21,9 @@ function productImageRemotePatterns() {
 
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    agentUpgrade: "security",
+  },
   images: {
     remotePatterns: productImageRemotePatterns(),
   },
