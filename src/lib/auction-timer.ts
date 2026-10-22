@@ -1,5 +1,5 @@
 export const DEFAULT_AUCTION_TIMER_SECONDS = 2 * 60;
-export const AUCTION_START_COUNTDOWN_SECONDS = 5;
+export const AUCTION_START_COUNTDOWN_SECONDS = 15;
 
 export function remainingAuctionStartSeconds(
   startsAt: string | null,

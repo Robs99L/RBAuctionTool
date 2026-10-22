@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUCTION_START_COUNTDOWN_SECONDS,
   DEFAULT_AUCTION_TIMER_SECONDS,
   formatAuctionTimer,
   remainingAuctionSeconds,
@@ -29,11 +30,15 @@ describe("remainingAuctionSeconds", () => {
 });
 
 describe("remainingAuctionStartSeconds", () => {
-  const startsAt = "2026-10-15T20:00:05.000Z";
+  const startsAt = "2026-10-15T20:00:15.000Z";
   const scheduledStart = Date.parse(startsAt);
 
   it("counts down to the scheduled server start", () => {
-    expect(remainingAuctionStartSeconds(startsAt, scheduledStart - 5_000)).toBe(5);
+    expect(AUCTION_START_COUNTDOWN_SECONDS).toBe(15);
+    expect(remainingAuctionStartSeconds(
+      startsAt,
+      scheduledStart - AUCTION_START_COUNTDOWN_SECONDS * 1000,
+    )).toBe(AUCTION_START_COUNTDOWN_SECONDS);
     expect(remainingAuctionStartSeconds(startsAt, scheduledStart - 1)).toBe(1);
   });
 

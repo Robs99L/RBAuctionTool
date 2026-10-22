@@ -7,7 +7,7 @@ Use a separate Supabase staging project for rehearsal. Never run the automated l
 1. Use Supabase Pro and Netlify Pro. In Supabase Pro, disable the spend cap or request adequate Realtime limits; the spend-capped Pro limit is too low for repeated fan-out to 300 clients.
 2. Under **Authentication → Rate Limits**, set **Anonymous sign-ins** to at least `600` per hour. The bucket is per public IP, so this is required when all guests share the venue network.
 3. Enable anonymous sign-ins. Consider CAPTCHA or an upstream venue-only access rule to offset the higher sign-in allowance.
-4. Apply every migration, including `20261022075657_optimize_live_auction_scale.sql`.
+4. Apply every migration, including `20261022075657_optimize_live_auction_scale.sql` and `20261022183551_extend_auction_start_countdown.sql`.
 5. Confirm `auctions`, `bids`, and `participants` are in **Database → Pipelines → Realtime**.
 6. Run Supabase Security, Performance, and Health Advisors and resolve every error-level finding.
 7. Configure Production environment variables in Netlify and redeploy after changing them.

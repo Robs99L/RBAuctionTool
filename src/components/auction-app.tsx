@@ -901,6 +901,8 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  const [resultReadyAuctionId, setResultReadyAuctionId] = useState<string | null>(null);
+  const [dismissedResultAuctionId, setDismissedResultAuctionId] = useState<string | null>(null);
   const status = effectiveStatus(auction);
   const biddingOpen = useBiddingOpen(status, auction.starts_at);
   const starting = status === "active" && !biddingOpen;
@@ -918,6 +920,30 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
     highest?.amount,
   );
   const personalRank = leaderboard.find((entry) => entry.participant_id === participant?.id);
+  const showResultModal = Boolean(
+    participant &&
+    status === "ended" &&
+    resultReadyAuctionId === auction.id &&
+    dismissedResultAuctionId !== auction.id,
+  );
+
+  useEffect(() => {
+    if (
+      !participant ||
+      status !== "ended" ||
+      resultReadyAuctionId === auction.id
+    ) return;
+
+    let active = true;
+    void refreshDashboard()
+      .catch(() => undefined)
+      .then(() => {
+        if (active) setResultReadyAuctionId(auction.id);
+      });
+    return () => {
+      active = false;
+    };
+  }, [auction.id, participant, refreshDashboard, resultReadyAuctionId, status]);
 
   async function submitBid(event: FormEvent) {
     event.preventDefault();
@@ -962,6 +988,13 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
+      {showResultModal && participant && (
+        <AuctionResultModal
+          auction={auction}
+          personalRank={personalRank}
+          onClose={() => setDismissedResultAuctionId(auction.id)}
+        />
+      )}
       {connection === "offline" && (
         <div className="notice notice-info mb-5" role="status">
           Live updates are reconnecting. Accepted bids are still checked against the latest database value.
@@ -1166,6 +1199,82 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
         <span>Names are self-reported; email addresses remain private.</span>
         <Link href="/admin" className="text-link">Auction administration</Link>
       </footer>
+    </div>
+  );
+}
+
+function AuctionResultModal({
+  auction,
+  personalRank,
+  onClose,
+}: {
+  auction: Auction;
+  personalRank: LeaderboardEntry | undefined;
+  onClose: () => void;
+}) {
+  const won = Boolean(personalRank?.is_winner);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auction-result-title"
+        aria-describedby="auction-result-description"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className={`text-xs font-bold uppercase tracking-[.18em] ${won ? "text-forest" : "text-ink/45"}`}>
+              Final result
+            </p>
+            <h2 id="auction-result-title" className="mt-2 text-3xl font-semibold tracking-[-.04em]">
+              {won ? "You won!" : "You did not win this lot."}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-ink/5 text-xl font-semibold text-ink transition hover:bg-ink/10"
+            onClick={onClose}
+            aria-label="Close result"
+          >
+            &times;
+          </button>
+        </div>
+
+        <p id="auction-result-description" className="mt-5 text-lg font-semibold">
+          {auction.title}
+        </p>
+        {personalRank ? (
+          <p className="mt-2 leading-7 text-ink/60">
+            You finished #{personalRank.bidder_rank} with a bid of {formatMoney(personalRank.amount, auction.currency)}.
+          </p>
+        ) : (
+          <p className="mt-2 leading-7 text-ink/60">
+            No accepted bid from your account finished in a winning place.
+          </p>
+        )}
+        <p className="mt-5 text-sm leading-6 text-ink/45">
+          You can close this message now. It also closes automatically when the next round starts.
+        </p>
+        <button type="button" className="btn-primary mt-6 w-full" onClick={onClose} autoFocus>
+          Close
+        </button>
+      </section>
     </div>
   );
 }
