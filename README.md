@@ -7,11 +7,12 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Anonymous participant sessions persisted across every product lot by the Supabase browser client
 - Duplicate display-name prevention per product lot
 - Realtime bid history, highest bid, leading participant, and connection state
+- Incremental Realtime updates without per-event dashboard refetches, plus a single consistent reconnect snapshot
 - Database-ranked leaderboard with one best bid per participant, personal rank, and final winner state
 - A synchronized five-second public start countdown before bidding opens, followed by a configurable visual auction timer that remains display-only; closing stays a manual administrator action
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
-- Protected `/admin` page for creating/editing, starting, and ending an auction, uploading product images, configuring how many distinct highest bidders win, and viewing ranked bid history
+- Protected `/admin` page for creating/editing, starting, and ending an auction, uploading automatically optimized product images, configuring how many distinct highest bidders win, and viewing ranked bid history
 - Downloadable Excel event template with validated, all-or-nothing queue import for up to 500 events
 - Queue reordering, safe duplication/deletion, explicit start/end confirmations, Realtime admin refresh with a polling fallback, and an append-only change audit
 - Finalized-winner CSV export with private contacts and winning amounts
@@ -101,9 +102,12 @@ npm run typecheck
 npm run lint
 npm test
 npm run build
+npm run loadtest:auction -- --help
 ```
 
 The unit tests cover currency parsing and minimum-bid calculation. The authoritative validation and concurrency boundary live in PostgreSQL and should also be exercised against a disposable Supabase project before release.
+
+For the 300-participant rehearsal, production settings, acceptance criteria, and incident procedure, follow [`LIVE_AUCTION_RUNBOOK.md`](LIVE_AUCTION_RUNBOOK.md).
 
 ## Netlify deployment
 

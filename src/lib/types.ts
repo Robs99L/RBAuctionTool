@@ -53,6 +53,18 @@ export type LeaderboardEntry = {
   is_final: boolean;
 };
 
+export type AuctionLiveState = {
+  bids: Bid[];
+  leaderboard: LeaderboardEntry[];
+  participantCount: number;
+  participantNames: Record<string, string>;
+};
+
+export type AuctionDashboardSnapshot = {
+  auction: Auction;
+  liveState: AuctionLiveState;
+};
+
 export type WinnerPaymentStatus = "pending" | "paid" | "waived";
 
 export type WinnerReportEntry = {

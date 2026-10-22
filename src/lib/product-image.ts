@@ -1,9 +1,9 @@
 export const PRODUCT_IMAGE_BUCKET = "product-images";
 export const PRODUCT_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
-export const PRODUCT_IMAGE_MIME_TYPES = ["image/png", "image/jpeg"] as const;
+export const PRODUCT_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 
 export type ProductImageMimeType = (typeof PRODUCT_IMAGE_MIME_TYPES)[number];
-export type ProductImageExtension = "png" | "jpg";
+export type ProductImageExtension = "png" | "jpg" | "webp";
 
 export function productImageExtension(
   mimeType: string,

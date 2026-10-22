@@ -13,6 +13,7 @@ import {
   PRODUCT_IMAGE_MIME_TYPES,
   type ProductImageMimeType,
 } from "@/lib/product-image";
+import { optimizeProductImage } from "@/lib/product-image-server";
 import { validateAuctionInput } from "@/lib/auction-input";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -171,14 +172,25 @@ export async function PUT(request: Request) {
     return noStoreJson({ error: "Event images must not exceed 4 MB." }, { status: 413 });
   }
 
-  let imageUpload: { bytes: Uint8Array; extension: "png" | "jpg" } | null = null;
+  let imageUpload: {
+    bytes: Uint8Array;
+    extension: "webp";
+    contentType: "image/webp";
+  } | null = null;
   if (imageFile) {
     const bytes = new Uint8Array(await imageFile.arrayBuffer());
     const extension = productImageExtension(imageFile.type, bytes);
     if (!extension) {
       return noStoreJson({ error: "Event images must be valid PNG or JPEG files." }, { status: 400 });
     }
-    imageUpload = { bytes, extension };
+    try {
+      imageUpload = await optimizeProductImage(bytes);
+    } catch (imageError) {
+      console.error("Could not optimize the event image.", imageError);
+      return noStoreJson({
+        error: "The event image could not be optimized. Use a smaller PNG or JPEG file.",
+      }, { status: 400 });
+    }
   }
 
   let uploadedPath: string | null = null;
@@ -235,7 +247,7 @@ export async function PUT(request: Request) {
         .from(PRODUCT_IMAGE_BUCKET)
         .upload(uploadedPath, imageUpload.bytes, {
           cacheControl: "31536000",
-          contentType: imageFile.type,
+          contentType: imageUpload.contentType,
           upsert: false,
         });
       if (uploadError) throw uploadError;

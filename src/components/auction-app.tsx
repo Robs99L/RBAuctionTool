@@ -2,11 +2,20 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png";
 import { AuctionTimer } from "@/components/auction-timer";
 import { RbLogo } from "@/components/rb-logo";
+import {
+  applyAuctionRules,
+  applyLiveAuctionEvent,
+  emptyAuctionLiveState,
+  normalizeAuctionDashboard,
+  type LiveAuctionEvent,
+  type LiveBidInsert,
+  type LiveParticipantInsert,
+} from "@/lib/auction-live-state";
 import { selectNextAuction, selectParticipantAuction } from "@/lib/auction-queue";
 import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
@@ -35,6 +44,7 @@ import type {
   Auction,
   AuctionStatus,
   Bid,
+  BidReceipt,
   LeaderboardEntry,
   Participant,
 } from "@/lib/types";
@@ -55,24 +65,6 @@ function normalizeAuction(value: Record<string, unknown>): Auction {
   };
 }
 
-function participantName(value: unknown) {
-  if (Array.isArray(value)) return (value[0] as { username?: string } | undefined)?.username;
-  return (value as { username?: string } | null)?.username;
-}
-
-function normalizeLeaderboard(rows: Array<Record<string, unknown>> = []): LeaderboardEntry[] {
-  return rows.map((row) => ({
-    bid_id: String(row.bid_id),
-    participant_id: String(row.participant_id),
-    username: String(row.username ?? "Unknown participant"),
-    amount: Number(row.amount),
-    created_at: String(row.created_at),
-    bidder_rank: Number(row.bidder_rank),
-    is_winner: Boolean(row.is_winner),
-    is_final: Boolean(row.is_final),
-  }));
-}
-
 function auctionError(error: unknown, fallback: string) {
   const message = error instanceof Error
     ? error.message
@@ -84,6 +76,7 @@ function auctionError(error: unknown, fallback: string) {
     "This auction is not accepting bids.",
     "Registration is closed because this auction has ended.",
     "Enter a valid bid with no more than two decimal places.",
+    "Please wait a moment before placing another bid.",
   ];
   const known = knownMessages.find((candidate) => message.includes(candidate));
   if (known) return known;
@@ -131,18 +124,56 @@ export function AuctionApp() {
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [auction, setAuction] = useState<Auction | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
-  const [bids, setBids] = useState<Bid[]>([]);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [participantCount, setParticipantCount] = useState(0);
+  const [liveState, setLiveState] = useState(emptyAuctionLiveState);
   const [loading, setLoading] = useState(configured && !demoMode);
   const [restoredAuctionId, setRestoredAuctionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [connection, setConnection] = useState<ConnectionState>("connecting");
+  const auctionsRef = useRef<Auction[]>([]);
+  const auctionRef = useRef<Auction | null>(null);
+  const liveStateRef = useRef(liveState);
+  const liveEventBufferRef = useRef<LiveAuctionEvent[]>([]);
+  const snapshotGenerationRef = useRef(0);
+  const snapshotRequestRef = useRef<{
+    auctionId: string;
+    generation: number;
+    promise: Promise<void>;
+  } | null>(null);
+  const { bids, leaderboard, participantCount } = liveState;
   const auctionId = auction?.id;
+  const shouldObserveLiveAuction = Boolean(participant) || auction?.status === "ended";
+  const shouldObserveLiveAuctionRef = useRef(shouldObserveLiveAuction);
   const nextAuction = useMemo(
     () => selectNextAuction(auctions, auctionId),
     [auctionId, auctions],
   );
+
+  useEffect(() => {
+    shouldObserveLiveAuctionRef.current = shouldObserveLiveAuction;
+  }, [shouldObserveLiveAuction]);
+
+  const commitLiveState = useCallback((nextState: typeof liveState) => {
+    liveStateRef.current = nextState;
+    setLiveState(nextState);
+  }, []);
+
+  const commitAuction = useCallback((nextAuction: Auction | null) => {
+    const previousAuction = auctionRef.current;
+    auctionRef.current = nextAuction;
+    setAuction(nextAuction);
+
+    if (!nextAuction || previousAuction?.id !== nextAuction.id) {
+      commitLiveState(emptyAuctionLiveState());
+      return;
+    }
+    commitLiveState(applyAuctionRules(liveStateRef.current, nextAuction));
+  }, [commitLiveState]);
+
+  const commitAuctions = useCallback((nextAuctions: Auction[]) => {
+    auctionsRef.current = nextAuctions;
+    setAuctions(nextAuctions);
+    commitAuction(selectParticipantAuction(nextAuctions));
+  }, [commitAuction]);
 
   const loadCurrentAuction = useCallback(async () => {
     if (!client) return;
@@ -152,45 +183,73 @@ export function AuctionApp() {
       .order("sort_order", { ascending: true });
     if (loadError) throw loadError;
     const nextAuctions = (data ?? []).map((row) => normalizeAuction(row));
-    setAuctions(nextAuctions);
-    setAuction(selectParticipantAuction(nextAuctions));
-  }, [client]);
+    commitAuctions(nextAuctions);
+  }, [client, commitAuctions]);
 
   const refreshDashboard = useCallback(async () => {
     if (!client || !auctionId) return;
-    const [bidResult, countResult, auctionResult, leaderboardResult] = await Promise.all([
-      client
-        .from("bids")
-        .select("id, auction_id, participant_id, amount, created_at, participants(username)")
-        .eq("auction_id", auctionId)
-        .order("created_at", { ascending: false })
-        .limit(30),
-      client
-        .from("participants")
-        .select("id", { count: "exact", head: true })
-        .eq("auction_id", auctionId),
-      client.from("auctions").select("*").eq("id", auctionId).single(),
-      client.rpc("get_auction_leaderboard", { p_auction_id: auctionId }),
-    ]);
+    const existingRequest = snapshotRequestRef.current;
+    if (existingRequest?.auctionId === auctionId) return existingRequest.promise;
 
-    if (bidResult.error) throw bidResult.error;
-    if (countResult.error) throw countResult.error;
-    if (auctionResult.error) throw auctionResult.error;
-    if (leaderboardResult.error) throw leaderboardResult.error;
+    const requestedAuctionId = auctionId;
+    const generation = ++snapshotGenerationRef.current;
+    liveEventBufferRef.current = [];
 
-    const normalized = (bidResult.data ?? []).map((row) => ({
-      id: row.id,
-      auction_id: row.auction_id,
-      participant_id: row.participant_id,
-      amount: Number(row.amount),
-      created_at: row.created_at,
-      username: participantName(row.participants) ?? "Unknown participant",
-    }));
-    setBids(normalized);
-    setLeaderboard(normalizeLeaderboard(leaderboardResult.data));
-    setParticipantCount(countResult.count ?? 0);
-    setAuction(normalizeAuction(auctionResult.data));
-  }, [auctionId, client]);
+    const replayBufferedEvents = (baseState: typeof liveState, snapshotAuction: Auction) => {
+      const buffered = liveEventBufferRef.current;
+      liveEventBufferRef.current = [];
+      return buffered.reduce(
+        (state, event) => applyLiveAuctionEvent(state, event, snapshotAuction),
+        baseState,
+      );
+    };
+
+    const request = (async () => {
+      const { data, error: snapshotError } = await client.rpc("get_auction_dashboard", {
+        p_auction_id: requestedAuctionId,
+      });
+      if (snapshotError) throw snapshotError;
+      if (
+        generation !== snapshotGenerationRef.current ||
+        auctionRef.current?.id !== requestedAuctionId
+      ) {
+        return;
+      }
+
+      const snapshot = normalizeAuctionDashboard(data, normalizeAuction);
+      const nextState = replayBufferedEvents(snapshot.liveState, snapshot.auction);
+      auctionRef.current = snapshot.auction;
+      setAuction(snapshot.auction);
+      commitLiveState(nextState);
+    })().catch((snapshotError: unknown) => {
+      if (
+        generation === snapshotGenerationRef.current &&
+        auctionRef.current?.id === requestedAuctionId
+      ) {
+        const currentAuction = auctionRef.current;
+        commitLiveState(replayBufferedEvents(liveStateRef.current, currentAuction));
+      }
+      throw snapshotError;
+    }).finally(() => {
+      if (snapshotRequestRef.current?.generation === generation) {
+        snapshotRequestRef.current = null;
+      }
+    });
+
+    snapshotRequestRef.current = { auctionId: requestedAuctionId, generation, promise: request };
+    return request;
+  }, [auctionId, client, commitLiveState]);
+
+  const handleLiveEvent = useCallback((event: LiveAuctionEvent) => {
+    const currentAuction = auctionRef.current;
+    if (!currentAuction || event.record.auction_id !== currentAuction.id) return;
+
+    if (snapshotRequestRef.current?.auctionId === currentAuction.id) {
+      liveEventBufferRef.current.push(event);
+      return;
+    }
+    commitLiveState(applyLiveAuctionEvent(liveStateRef.current, event, currentAuction));
+  }, [commitLiveState]);
 
   const joinAuction = useCallback(async (username: string, email: string) => {
     if (!client || !auctionId) throw new Error("The auction is not available.");
@@ -219,15 +278,36 @@ export function AuctionApp() {
     return data[0] as Participant;
   }, [auctionId, client]);
 
-  const placeBid = useCallback(async (amount: number) => {
+  const placeBid = useCallback(async (amount: number): Promise<BidReceipt> => {
     if (!client || !auctionId) throw new Error("The auction is not available.");
     const { data, error: bidError } = await client.rpc("place_bid", {
       p_auction_id: auctionId,
       p_amount: amount,
     });
     if (bidError) throw new Error(auctionError(bidError, "Your bid could not be accepted."));
-    return Number(data?.[0]?.amount ?? amount);
-  }, [auctionId, client]);
+    const receipt = data?.[0];
+    if (!receipt) throw new Error("The accepted bid receipt is unavailable.");
+    const normalizedReceipt = {
+      bid_id: String(receipt.bid_id),
+      amount: Number(receipt.amount),
+      created_at: String(receipt.created_at),
+      username: String(receipt.username),
+    };
+    if (participant) {
+      handleLiveEvent({
+        kind: "bid",
+        record: {
+          id: normalizedReceipt.bid_id,
+          auction_id: auctionId,
+          participant_id: participant.id,
+          amount: normalizedReceipt.amount,
+          created_at: normalizedReceipt.created_at,
+          username: normalizedReceipt.username,
+        },
+      });
+    }
+    return normalizedReceipt;
+  }, [auctionId, client, handleLiveEvent, participant]);
 
   useEffect(() => {
     if (!client) return;
@@ -254,22 +334,45 @@ export function AuctionApp() {
 
   useEffect(() => {
     if (!client) return;
-    const refreshQueue = () => {
-      void loadCurrentAuction().catch(() => setConnection("offline"));
+    const applyQueueChange = (payload: {
+      eventType: "INSERT" | "UPDATE" | "DELETE";
+      new: Record<string, unknown>;
+      old: Record<string, unknown>;
+    }) => {
+      const current = auctionsRef.current;
+      let nextAuctions = current;
+      if (payload.eventType === "DELETE") {
+        const deletedId = String(payload.old.id ?? "");
+        nextAuctions = current.filter((item) => item.id !== deletedId);
+      } else {
+        const changed = normalizeAuction(payload.new);
+        const exists = current.some((item) => item.id === changed.id);
+        nextAuctions = exists
+          ? current.map((item) => item.id === changed.id ? changed : item)
+          : [...current, changed];
+      }
+      commitAuctions(nextAuctions);
     };
     const channel = client
       .channel("auction-queue")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "auctions" },
-        refreshQueue,
+        (payload) => applyQueueChange(payload as Parameters<typeof applyQueueChange>[0]),
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (!shouldObserveLiveAuctionRef.current) {
+          if (status === "SUBSCRIBED") setConnection("live");
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            setConnection("offline");
+          }
+        }
+      });
 
     return () => {
       void client.removeChannel(channel);
     };
-  }, [client, loadCurrentAuction]);
+  }, [client, commitAuctions]);
 
   useEffect(() => {
     if (!client || !auctionId) return;
@@ -277,9 +380,6 @@ export function AuctionApp() {
 
     async function restoreParticipant() {
       setParticipant(null);
-      setBids([]);
-      setLeaderboard([]);
-      setParticipantCount(0);
       try {
         const session = await getVerifiedSupabaseSession(client!);
         if (!session || !active) return;
@@ -290,7 +390,7 @@ export function AuctionApp() {
         if (!active) return;
 
         const currentParticipant = data?.[0] ? data[0] as Participant : null;
-        if (!currentParticipant && auction?.status === "ended") {
+        if (!currentParticipant && auctionRef.current?.status === "ended") {
           setParticipant(null);
           return;
         }
@@ -330,48 +430,117 @@ export function AuctionApp() {
     return () => {
       active = false;
     };
-  }, [auction?.status, auctionId, client, joinAuction]);
+  }, [auctionId, client, joinAuction]);
 
   useEffect(() => {
-    if (!client || !auctionId) return;
+    if (
+      !client ||
+      !auctionId ||
+      !shouldObserveLiveAuction
+    ) return;
     let active = true;
-    const initialRefresh = window.setTimeout(() => {
-      void refreshDashboard().catch((refreshError: unknown) => {
-        if (active) {
-          setError(refreshError instanceof Error ? refreshError.message : "Could not load bids.");
-        }
-      });
-    }, 0);
+    let subscribed = false;
 
-    const refresh = () => {
-      void refreshDashboard().catch(() => setConnection("offline"));
+    const recoverSnapshot = () => {
+      void refreshDashboard()
+        .then(() => {
+          if (active) setError("");
+        })
+        .catch((refreshError: unknown) => {
+          if (!active) return;
+          setConnection("offline");
+          setError(refreshError instanceof Error ? refreshError.message : "Could not load bids.");
+        });
     };
+    const fallbackRefresh = window.setTimeout(() => {
+      if (!subscribed) recoverSnapshot();
+    }, 4_000);
+
     const channel = client
       .channel(`auction:${auctionId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "bids", filter: `auction_id=eq.${auctionId}` },
-        refresh,
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "bids",
+          filter: `auction_id=eq.${auctionId}`,
+          select: ["id", "auction_id", "participant_id", "amount", "created_at"],
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          handleLiveEvent({
+            kind: "bid",
+            record: {
+              id: String(row.id),
+              auction_id: String(row.auction_id),
+              participant_id: String(row.participant_id),
+              amount: Number(row.amount),
+              created_at: String(row.created_at),
+            } satisfies LiveBidInsert,
+          });
+        },
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "participants", filter: `auction_id=eq.${auctionId}` },
-        refresh,
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "participants",
+          filter: `auction_id=eq.${auctionId}`,
+          select: ["id", "auction_id", "username"],
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          handleLiveEvent({
+            kind: "participant",
+            record: {
+              id: String(row.id),
+              auction_id: String(row.auction_id),
+              username: String(row.username ?? "Unknown participant"),
+            } satisfies LiveParticipantInsert,
+          });
+        },
       )
       .subscribe((status) => {
         if (!active) return;
-        if (status === "SUBSCRIBED") setConnection("live");
+        if (status === "SUBSCRIBED") {
+          subscribed = true;
+          window.clearTimeout(fallbackRefresh);
+          setConnection("live");
+          recoverSnapshot();
+        }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          subscribed = false;
           setConnection("offline");
         }
       });
 
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") recoverSnapshot();
+    };
+    window.addEventListener("online", recoverSnapshot);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
     return () => {
       active = false;
-      window.clearTimeout(initialRefresh);
+      snapshotGenerationRef.current += 1;
+      snapshotRequestRef.current = null;
+      liveEventBufferRef.current = [];
+      window.clearTimeout(fallbackRefresh);
+      window.removeEventListener("online", recoverSnapshot);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
       void client.removeChannel(channel);
     };
-  }, [auctionId, client, refreshDashboard]);
+  }, [auctionId, client, handleLiveEvent, refreshDashboard, shouldObserveLiveAuction]);
+
+  useEffect(() => {
+    if (!shouldObserveLiveAuction || connection !== "offline") return;
+    const interval = window.setInterval(() => {
+      void refreshDashboard().catch(() => undefined);
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, [connection, refreshDashboard, shouldObserveLiveAuction]);
 
   if (demoMode) return <DemoAuctionApp />;
   if (!configured) return <ConfigurationScreen />;
@@ -532,7 +701,12 @@ function DemoAuctionApp() {
       username: participant.username,
     };
     commitState({ ...demoState, bids: [nextBid, ...demoState.bids] });
-    return amount;
+    return {
+      bid_id: nextBid.id,
+      amount: nextBid.amount,
+      created_at: nextBid.created_at,
+      username: nextBid.username,
+    } satisfies BidReceipt;
   }, [commitState, demoAuction, demoBids, demoState, participant]);
 
   const resetDemo = useCallback(() => {
@@ -721,7 +895,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
   bids: Bid[];
   leaderboard: LeaderboardEntry[];
   connection: ConnectionState;
-  onPlaceBid: (amount: number) => Promise<number>;
+  onPlaceBid: (amount: number) => Promise<BidReceipt>;
   refreshDashboard: () => Promise<void>;
 }) {
   const [amount, setAmount] = useState("");
@@ -769,13 +943,12 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
     setSubmitting(true);
     setFeedback(null);
     try {
-      const acceptedAmount = await onPlaceBid(parsed);
+      const receipt = await onPlaceBid(parsed);
       setAmount("");
       setFeedback({
         kind: "success",
-        text: `Bid accepted at ${formatMoney(acceptedAmount, auction.currency)}.`,
+        text: `Bid accepted at ${formatMoney(receipt.amount, auction.currency)}.`,
       });
-      await refreshDashboard();
     } catch (bidError) {
       setFeedback({
         kind: "error",
@@ -800,7 +973,13 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
             <div>
               <div className="relative aspect-video w-full bg-ink">
                 {auction.image_url ? (
-                  <img src={auction.image_url} alt={auction.title} className="absolute inset-0 h-full w-full object-contain" />
+                  <Image
+                    src={auction.image_url}
+                    alt={auction.title}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 58vw"
+                    className="object-contain"
+                  />
                 ) : (
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,#557867,#18201d_68%)]" />
                 )}

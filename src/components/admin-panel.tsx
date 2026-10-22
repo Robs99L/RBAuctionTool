@@ -289,7 +289,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       realtimeRefreshTimerRef.current = window.setTimeout(() => {
         realtimeRefreshTimerRef.current = null;
         void load(selectedAuctionIdRef.current ?? undefined, true);
-      }, 400);
+      }, 1_000);
     };
     const interval = window.setInterval(
       () => void load(selectedAuctionIdRef.current ?? undefined, true),
@@ -300,7 +300,6 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       .channel("admin-auction-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, refresh)
       .subscribe();
 
     return () => {
