@@ -19,6 +19,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
+- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and live leaderboard; longer rankings rotate automatically
 
 ## Local setup
 
@@ -30,6 +31,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. Administration is at `http://localhost:3000/admin`.
+
+For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays public participant names and highest bids without requiring registration. Rankings with more than five bidders rotate every eight seconds. A periodic refresh also recovers missed event changes and bids. The local demo synchronizes with other tabs in the same browser.
 
 In development, missing Supabase environment variables automatically enable local demo mode. It includes a live sample lot, participants, bids, working bid submission, and an editable administration page. Demo changes are stored in the browser and can be reset from either page. Production fails closed with a configuration screen unless `NEXT_PUBLIC_DEMO_MODE=true` is set intentionally.
 

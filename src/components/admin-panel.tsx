@@ -1039,7 +1039,7 @@ function AuctionManagerView({
                 PNG or JPEG, maximum {demo ? "1 MB in demo mode" : "4 MB"}. 16:9 is recommended, for example an exported PowerPoint slide. Choosing no file keeps the current image.
               </p>
               {imagePreviewUrl && (
-                <div className="mt-3 aspect-video w-full max-w-2xl overflow-hidden rounded-2xl border border-ink/10 bg-mist">
+                <div className="event-image-frame mt-3 max-w-2xl rounded-2xl border border-ink/10 bg-mist">
                   <img src={imagePreviewUrl} alt="Event preview" className="h-full w-full object-contain" />
                 </div>
               )}

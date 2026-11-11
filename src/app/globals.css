@@ -44,6 +44,14 @@ button, a {
   letter-spacing: 0;
 }
 
+.event-image-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .text-link {
   display: inline-flex;
   min-height: 2.75rem;

@@ -6,6 +6,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 
 import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png";
 import { AuctionTimer } from "@/components/auction-timer";
+import { PresentationView } from "@/components/presentation-view";
 import { RbLogo } from "@/components/rb-logo";
 import {
   applyAuctionRules,
@@ -114,7 +115,7 @@ function useBiddingOpen(status: AuctionStatus, startsAt: string | null) {
   return open && status === "active" && remainingAuctionStartSeconds(startsAt) === 0;
 }
 
-export function AuctionApp() {
+export function AuctionApp({ presentation = false }: { presentation?: boolean }) {
   const configured = hasSupabaseBrowserConfig();
   const demoMode = browserDemoMode(configured);
   const client = useMemo(
@@ -141,7 +142,7 @@ export function AuctionApp() {
   } | null>(null);
   const { bids, leaderboard, participantCount } = liveState;
   const auctionId = auction?.id;
-  const shouldObserveLiveAuction = Boolean(participant) || auction?.status === "ended";
+  const shouldObserveLiveAuction = presentation || Boolean(participant) || auction?.status === "ended";
   const shouldObserveLiveAuctionRef = useRef(shouldObserveLiveAuction);
   const nextAuction = useMemo(
     () => selectNextAuction(auctions, auctionId),
@@ -375,7 +376,7 @@ export function AuctionApp() {
   }, [client, commitAuctions]);
 
   useEffect(() => {
-    if (!client || !auctionId) return;
+    if (!client || !auctionId || presentation) return;
     let active = true;
 
     async function restoreParticipant() {
@@ -430,7 +431,7 @@ export function AuctionApp() {
     return () => {
       active = false;
     };
-  }, [auctionId, client, joinAuction]);
+  }, [auctionId, client, joinAuction, presentation]);
 
   useEffect(() => {
     if (
@@ -542,8 +543,34 @@ export function AuctionApp() {
     return () => window.clearInterval(interval);
   }, [connection, refreshDashboard, shouldObserveLiveAuction]);
 
-  if (demoMode) return <DemoAuctionApp />;
+  useEffect(() => {
+    if (!presentation || !client) return;
+    let active = true;
+    const recover = () => {
+      void loadCurrentAuction()
+        .then(() => refreshDashboard())
+        .then(() => { if (active) setError(""); })
+        .catch(() => { if (active) setConnection("offline"); });
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") recover();
+    };
+    const interval = window.setInterval(recover, 15_000);
+    window.addEventListener("online", recover);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("online", recover);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [client, loadCurrentAuction, presentation, refreshDashboard]);
+
+  if (demoMode) return <DemoAuctionApp presentation={presentation} />;
   if (!configured) return <ConfigurationScreen />;
+  if (presentation) {
+    return <PresentationView auction={auction} leaderboard={leaderboard} connection={connection} loading={loading} error={error} nextEventName={nextAuction?.title} />;
+  }
   if (loading) return <LoadingScreen />;
   if (error && !auction) return <ErrorScreen message={error} />;
   if (!auction) return <NoAuction />;
@@ -576,7 +603,7 @@ export function AuctionApp() {
   );
 }
 
-function DemoAuctionApp() {
+function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
   const [demoState, setDemoState] = useState<DemoAuctionState | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const demoAuction = useMemo(
@@ -615,7 +642,7 @@ function DemoAuctionApp() {
   useEffect(() => {
     const load = () => {
       const next = loadDemoAuctionState();
-      const participantId = loadDemoParticipantId();
+      const participantId = presentation ? null : loadDemoParticipantId();
       const currentAuction = selectParticipantAuction(next.auctions);
       setDemoState(next);
       const existingParticipant = next.participants.find((item) => item.id === participantId);
@@ -624,7 +651,7 @@ function DemoAuctionApp() {
           ? { ...existingParticipant, auction_id: currentAuction.id }
           : null,
       );
-      saveDemoAuctionState(next);
+      if (!presentation) saveDemoAuctionState(next);
     };
     load();
 
@@ -633,7 +660,7 @@ function DemoAuctionApp() {
     };
     window.addEventListener("storage", syncAcrossTabs);
     return () => window.removeEventListener("storage", syncAcrossTabs);
-  }, []);
+  }, [presentation]);
 
   const commitState = useCallback((next: DemoAuctionState) => {
     setDemoState(next);
@@ -716,6 +743,9 @@ function DemoAuctionApp() {
     commitState(next);
   }, [commitState]);
 
+  if (presentation) {
+    return <PresentationView auction={demoAuction} leaderboard={demoLeaderboard} connection="live" loading={!demoState} nextEventName={demoNextAuction?.title} demo />;
+  }
   if (!demoState) return <LoadingScreen />;
   if (!demoAuction) return <NoAuction />;
 
@@ -817,13 +847,14 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
 
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-center lg:min-h-[calc(100dvh-81px)] lg:grid-cols-[1.08fr_.92fr]">
-      <section className="h-36 min-w-0 max-w-full overflow-hidden bg-ink sm:h-56 lg:h-auto">
+      <section className="event-image-frame min-w-0 max-w-full bg-ink">
         <Image
-          src={christmasAuctionImage}
-          alt="Christmas Auction"
+          src={auction.image_url ?? christmasAuctionImage}
+          alt={auction.image_url ? auction.title : "Christmas Auction"}
+          fill
           sizes="(max-width: 1024px) 100vw, 54vw"
-          className="block h-full w-full object-cover opacity-90 lg:h-auto lg:object-contain"
-          placeholder="blur"
+          className="object-contain"
+          placeholder={auction.image_url ? "empty" : "blur"}
           preload
         />
       </section>
@@ -1004,7 +1035,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
         <div className="contents lg:block lg:space-y-6">
           <section className="panel order-1 overflow-hidden lg:order-none">
             <div>
-              <div className="relative aspect-video w-full bg-ink">
+              <div className="event-image-frame bg-ink">
                 {auction.image_url ? (
                   <Image
                     src={auction.image_url}

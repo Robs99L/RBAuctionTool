@@ -16,7 +16,17 @@ export default function AdminPage() {
               Christmas Auction
             </span>
           </Link>
-          <Link className="text-link" href="/">View auction</Link>
+          <nav className="flex flex-wrap items-center gap-4" aria-label="Auction views">
+            <Link className="text-link" href="/">View auction</Link>
+            <Link className="btn-secondary gap-2" href="/presentation" target="_blank" rel="noopener noreferrer">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="13" rx="2" />
+                <path d="M12 16v5m-5 0h10" />
+              </svg>
+              Presentation view
+              <span className="sr-only"> (opens in a new tab)</span>
+            </Link>
+          </nav>
         </header>
         <AdminPanel />
       </div>
