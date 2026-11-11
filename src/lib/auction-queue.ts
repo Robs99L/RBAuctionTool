@@ -1,5 +1,15 @@
 import type { Auction } from "@/lib/types";
 
+export type AuctionQueueEvent = { kind: "upsert"; auction: Auction } | { kind: "delete"; id: string };
+
+export function applyAuctionQueueEvent(auctions: Auction[], event: AuctionQueueEvent) {
+  if (event.kind === "delete") return auctions.filter((auction) => auction.id !== event.id);
+  const exists = auctions.some((auction) => auction.id === event.auction.id);
+  return orderAuctions(exists
+    ? auctions.map((auction) => auction.id === event.auction.id ? event.auction : auction)
+    : [...auctions, event.auction]);
+}
+
 export function orderAuctions(auctions: Auction[]) {
   return [...auctions].sort((left, right) => left.sort_order - right.sort_order);
 }

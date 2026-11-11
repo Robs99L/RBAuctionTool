@@ -8,6 +8,7 @@ import {
   remainingAuctionStartSeconds,
 } from "@/lib/auction-timer";
 import type { AuctionStatus } from "@/lib/types";
+import { useAuctionClock } from "@/lib/use-auction-clock";
 
 export function AuctionTimer({
   startsAt,
@@ -26,11 +27,12 @@ export function AuctionTimer({
   compact?: boolean;
   className?: string;
 }) {
+  const clockReady = useAuctionClock();
   const [remainingSeconds, setRemainingSeconds] = useState(durationSeconds);
   const [startCountdownSeconds, setStartCountdownSeconds] = useState(0);
 
   useEffect(() => {
-    if (status !== "active") return;
+    if (status !== "active" || !clockReady) return;
     const update = () => {
       setStartCountdownSeconds(remainingAuctionStartSeconds(startsAt));
       setRemainingSeconds(remainingAuctionSeconds(startsAt, durationSeconds));
@@ -41,9 +43,10 @@ export function AuctionTimer({
       window.clearTimeout(initialUpdate);
       window.clearInterval(interval);
     };
-  }, [durationSeconds, startsAt, status]);
+  }, [clockReady, durationSeconds, startsAt, status]);
 
   if (status !== "active") return null;
+  if (!clockReady) return <div className={className} role="timer" aria-label="Synchronizing auction time">Synchronizing time…</div>;
   const starting = startCountdownSeconds > 0;
   const displayedSeconds = starting ? startCountdownSeconds : remainingSeconds;
   const elapsed = remainingSeconds === 0;

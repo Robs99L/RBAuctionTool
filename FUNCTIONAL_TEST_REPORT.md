@@ -2,6 +2,30 @@
 
 Stand: 11. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
+## Verstärkte Synchronisierung
+
+Auf ausdrücklichen Nutzerwunsch wurde die Synchronisierung erneut geprüft und verstärkt. Alle drei View-Typen verwenden eine gemeinsame Anwendungsserverzeit für ihre Timer. Die Zeitkalibrierung berücksichtigt die halbe gemessene Anfragezeit und verwendet anschließend eine monotone Uhr. Falsch eingestellte Geräteuhren verschieben damit den Countdown nicht mehr. Die Serverzeit wird einmal pro Minute und beim Wiederverbinden beziehungsweise erneuten Sichtbarwerden abgeglichen; bis zur ersten erfolgreichen Kalibrierung bleibt die Gebotseingabe gesperrt.
+
+Die Bieter- und Präsentationsansichten gleichen ihre Daten zusätzlich alle 15 Sekunden ab, solange sie sichtbar sind. Während der Wiederherstellung erfolgt der Versuch alle zehn Sekunden. Neuere Eventänderungen werden sowohl über verspätete Queueantworten als auch über verspätete Dashboardantworten übernommen. Dashboard-, Queue- und Admin-Ladeanfragen haben eine Zeitgrenze von zehn Sekunden. Verbindungsstatus und Gebotseingabe berücksichtigen, ob die notwendige Queue, die Live-Kanäle und das Dashboard des aktuellen Events tatsächlich bereit sind. Eine wiederhergestellte Anmeldung allein reicht nicht für die Anzeige „Live“. Beim Eventende wird ein neuer finaler Snapshot angefordert; persönliche Ergebnisdialoge warten auf dessen erfolgreichen Abruf und werden nach fehlgeschlagenem Abruf bei erneuter Synchronisierung wieder versucht.
+
+Die Administration fasst eingehende Gebote über 250 Millisekunden zusammen und aktualisiert auch während eines fortlaufenden Gebotsstroms. Hintergrundanfragen überlappen nicht; während einer laufenden Anfrage eintreffende Änderungen lösen einen weiteren Abruf aus. Die frühere Verzögerung wurde durch jedes neue Gebot zurückgesetzt und konnte dadurch die Anzeige bis zum Ende eines Gebotsstroms aufschieben. Queue-Rejoining, Online- und Sichtbarkeitsereignisse sowie ein 15-Sekunden-Abgleich aktualisieren jetzt ebenfalls die Administration. Namen werden nachgetragen, wenn eine Gebotsnachricht vor der zugehörigen Registrierungsnachricht ankommt.
+
+| Prüfung im isolierten Produktionsbuild | Ergebnis |
+| --- | --- |
+| Vier getrennte Browserkontexte: Präsentation, Admin und zwei registrierte Bieter; Geräteuhren ±5 beziehungsweise ±10 Minuten falsch | Alle vier Timer zeigten denselben 15-Sekunden-Countdown; beide Bieter wurden nach dem gemeinsamen Start freigeschaltet |
+| Verpasstes Gebot ohne Verbindungs- oder Sichtbarkeitsereignis | Alle öffentlichen Views zogen das Gebot beim regelmäßigen Abgleich nach |
+| Gleichzeitig abgeschickte identische Gebote | Die gemeinsame Serverfixture nahm genau ein Gebot an; alle öffentlichen Views zeigten danach dieselbe Rangliste |
+| Verspätete Queueantwort während des Wechsels von Event A zu B | Kein Rückwechsel zum alten Event |
+| 25 Gebotsnachrichten im Abstand von 100 Millisekunden; Adminantworten um 600 Millisekunden verzögert | Aktualisierung schon während des Stroms; vier Adminanfragen, maximal eine gleichzeitig, zuletzt aktueller Betrag sichtbar |
+| Wiederhergestellte Anmeldung und verbundener Live-Kanal, Dashboardantwort absichtlich verzögert | Gebotseingabe gesperrt und kein falscher „Live“-Status; Freigabe nach erfolgreichem Snapshot |
+| Gebotsnachricht vor Teilnehmernachricht | Gleicher korrekter Name in allen öffentlichen Views |
+| Eventende | Finale Rangliste abgeglichen und beide Bieterformulare gesperrt |
+| Automatisierte Tests, TypeScript, ESLint, Produktionsbuild | 90 Tests in 17 Dateien bestanden; übrige Prüfungen ebenfalls bestanden |
+
+Der Browserprüflauf erfasste keine unbehandelten Laufzeitfehler. [Prüfergebnis](qa/synchronization-results.json). Supabase-HTTP-Antworten, Realtime und die Annahme konkurrierender Gebote wurden mit einer gemeinsamen lokalen Serverfixture simuliert; die Zeitkalibrierung verwendete den echten lokalen API-Endpunkt. Es wurden keine produktiven Supabase-Daten verändert. Die Prüfung ersetzt keinen Test konkurrierender Datenbanktransaktionen und keinen Lasttest auf den Free-Tarifen.
+
+„Synchron“ bedeutet hier dieselbe serverseitige Event- und Gebotsgrundlage mit Live-Verteilung und automatischer Wiederherstellung. Netzwerk- und Renderverzögerungen verhindern eine garantierte Darstellung in derselben Millisekunde auf unabhängigen Geräten. Ein unterbrochenes Gerät kann erst nach erfolgreicher Wiederverbindung wieder den aktuellen Stand anzeigen. Die nachfolgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Aktuelle Konsistenzprüfung zwischen den Ansichten
 
 Admin-, Bieter- und Präsentationsansicht wurden gemeinsam in drei Tabs einer isolierten lokalen Demo geprüft. Zusätzlich wurden verzögerte Supabase-Dashboardantworten und Realtime-Nachrichten im Browser simuliert. Produktive Daten wurden nicht verändert.

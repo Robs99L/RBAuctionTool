@@ -1,9 +1,11 @@
+import { getAuctionNow } from "@/lib/auction-clock";
+
 export const DEFAULT_AUCTION_TIMER_SECONDS = 2 * 60;
 export const AUCTION_START_COUNTDOWN_SECONDS = 15;
 
 export function remainingAuctionStartSeconds(
   startsAt: string | null,
-  now = Date.now(),
+  now = getAuctionNow(),
 ) {
   if (!startsAt) return 0;
   const start = Date.parse(startsAt);
@@ -14,7 +16,7 @@ export function remainingAuctionStartSeconds(
 export function remainingAuctionSeconds(
   startsAt: string | null,
   durationSeconds = DEFAULT_AUCTION_TIMER_SECONDS,
-  now = Date.now(),
+  now = getAuctionNow(),
 ) {
   if (!startsAt) return durationSeconds;
   const start = Date.parse(startsAt);

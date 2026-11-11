@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
+import { createRefreshScheduler } from "@/lib/refresh-scheduler";
 import { moveAuctionInQueue, orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
 import { AUCTION_START_COUNTDOWN_SECONDS } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
@@ -232,7 +233,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   const [message, setMessage] = useState<Message>(null);
   const selectedAuctionIdRef = useRef<string | null>(null);
   const loadRequestRef = useRef(0);
-  const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const liveRefreshRef = useRef<ReturnType<typeof createRefreshScheduler> | null>(null);
   const suppressAuctionRefreshUntilRef = useRef(0);
 
   const load = useCallback(async (auctionId?: string, preserveForm = false) => {
@@ -240,7 +241,9 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     if (auctionId && !preserveForm) selectedAuctionIdRef.current = auctionId;
     try {
       const query = auctionId ? `?auctionId=${encodeURIComponent(auctionId)}` : "";
-      const response = await fetch(`/api/admin/auction${query}`, { cache: "no-store" });
+      const response = await fetch(`/api/admin/auction${query}`, {
+        cache: "no-store", signal: AbortSignal.timeout(10_000),
+      });
       const data = (await response.json()) as {
         auctions?: Auction[];
         auction?: Auction | null;
@@ -281,33 +284,37 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   }, [load]);
 
   useEffect(() => {
-    const refresh = () => {
+    const scheduler = createRefreshScheduler(async () => {
       if (Date.now() < suppressAuctionRefreshUntilRef.current) return;
-      if (realtimeRefreshTimerRef.current !== null) {
-        window.clearTimeout(realtimeRefreshTimerRef.current);
-      }
-      realtimeRefreshTimerRef.current = window.setTimeout(() => {
-        realtimeRefreshTimerRef.current = null;
-        void load(selectedAuctionIdRef.current ?? undefined, true);
-      }, 1_000);
+      await load(selectedAuctionIdRef.current ?? undefined, true);
+    });
+    liveRefreshRef.current = scheduler;
+    const refresh = () => scheduler.request();
+    const recover = () => scheduler.request(true);
+    const whenVisible = () => {
+      if (document.visibilityState === "visible") recover();
     };
     const interval = window.setInterval(
-      () => void load(selectedAuctionIdRef.current ?? undefined, true),
-      30_000,
+      whenVisible,
+      15_000,
     );
     const client = getSupabaseBrowserClient();
     const channel = client
       .channel("admin-auction-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, recover)
       .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, refresh)
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") recover();
+      });
+    window.addEventListener("online", recover);
+    document.addEventListener("visibilitychange", whenVisible);
 
     return () => {
       window.clearInterval(interval);
-      if (realtimeRefreshTimerRef.current !== null) {
-        window.clearTimeout(realtimeRefreshTimerRef.current);
-        realtimeRefreshTimerRef.current = null;
-      }
+      scheduler.dispose();
+      if (liveRefreshRef.current === scheduler) liveRefreshRef.current = null;
+      window.removeEventListener("online", recover);
+      document.removeEventListener("visibilitychange", whenVisible);
       void client.removeChannel(channel);
     };
   }, [load]);
@@ -410,10 +417,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     const previousAuction = auction;
     if (isMove) {
       suppressAuctionRefreshUntilRef.current = Number.POSITIVE_INFINITY;
-      if (realtimeRefreshTimerRef.current !== null) {
-        window.clearTimeout(realtimeRefreshTimerRef.current);
-        realtimeRefreshTimerRef.current = null;
-      }
+      liveRefreshRef.current?.cancel();
       const optimisticAuctions = moveAuctionInQueue(
         auctions,
         auction.id,

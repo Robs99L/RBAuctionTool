@@ -9,7 +9,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Realtime bid history, highest bid, leading participant, and connection state
 - Incremental Realtime updates without per-event dashboard refetches, plus a single consistent reconnect snapshot
 - Database-ranked leaderboard with one best bid per participant, personal rank, and final winner state
-- A synchronized 15-second public start countdown before bidding opens, followed by a configurable visual auction timer that remains display-only; closing stays a manual administrator action
+- A synchronized 15-second public start countdown using a shared application-server clock, followed by a configurable visual auction timer that remains display-only; closing stays a manual administrator action
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time/minimum increment, and timestamps accepted bids in PostgreSQL
 - Row Level Security with no browser access to insert bids or change auction settings
 - Protected `/admin` page for creating/editing, starting, and ending an auction, uploading automatically optimized product images, configuring how many distinct highest bidders win, and viewing ranked bid history
@@ -86,11 +86,15 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 The admin product cards and bid history show a donation total calculated in PostgreSQL. It sums the highest bid from each participant currently occupying a winning place. Ended events use their persisted winning amounts. Earlier increases by the same participant are not counted again. Participant emails are visible only in the protected admin bid history.
 
 The first acceptable bid is `starting price + minimum increment`. Every later bid from a participant who is not leading must be at least `current highest bid + minimum increment`; the current leader may raise their own bid by one cent or more. If a maximum increase is configured, no bid may exceed `current highest bid + maximum increase` (or `starting price + maximum increase` for the first bid).
-The public start countdown and the following auction timer both use the product's server-recorded start time. Reaching `00:00` on the auction timer does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**.
+The public start countdown and the following auction timer both use the product's server-recorded start time. Every view calibrates against the same application-server time through `/api/auction-clock`, accounts for half the measured round trip, and advances with the browser's monotonic clock. Calibration repeats once per minute and on reconnect or visibility restoration, so incorrect device clocks do not shift the countdown. Bid entry waits for the first successful calibration. Reaching `00:00` on the auction timer does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**. PostgreSQL remains authoritative for accepting bids.
 
 After an event ends, its final leaderboard remains publicly visible without requiring registration. The recent activity feed stays limited to 30 bids, while rank and winner status come from the complete database leaderboard.
 
-When a page comes back online, becomes visible again, or rejoins the event queue channel, it reloads the queue before refreshing the current event. Participant pages also retry failed recovery every 10 seconds while offline. The presentation screen refreshes every 15 seconds while connected. Concurrent recovery requests are combined into one request sequence.
+When a page comes back online, becomes visible again, or rejoins the event queue channel, it reloads the queue before refreshing the current event. All public views reconcile every 15 seconds while visible, or every 10 seconds during recovery. Concurrent queue and dashboard requests are combined; newer Realtime changes are replayed over responses captured before those changes. At event end, the public views fetch a fresh final snapshot. A public view reports **Live** only after both necessary channels and its dashboard snapshot are ready; bid entry is disabled while it synchronizes.
+
+Administration refreshes on event changes and coalesces bid bursts over 250 milliseconds without waiting for the stream to stop. Background refreshes do not overlap: updates arriving during a request schedule one follow-up. Rejoining, returning online, visibility restoration, and a 15-second fallback also refresh administration. The administrator's selected event and unsaved form edits are preserved.
+
+Realtime delivers updates with normal network latency; simultaneous rendering in the same millisecond on independent devices is not guaranteed. Periodic reconciliation repairs silently missed notifications when network requests succeed. Neither a disconnected device nor an overloaded service can be guaranteed to display the latest state until connectivity recovers.
 
 ## Test two participants
 

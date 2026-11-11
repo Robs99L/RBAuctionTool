@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-11",
+  "mode": "Browser HTTP/Realtime simulation with shared server fixture and real local clock endpoint; no production writes",
+  "results": [
+    {
+      "scenario": "Four views share the start countdown despite device clocks offset by ±5 and ±10 minutes",
+      "passed": true,
+      "timers": [
+        "Bidding starts in 15 seconds",
+        "Bidding starts in 15 seconds",
+        "Bidding starts in 15 seconds",
+        "Bidding starts in 15 seconds"
+      ]
+    },
+    {
+      "scenario": "Bidding opens from synchronized server time on both participant devices",
+      "passed": true
+    },
+    {
+      "scenario": "All public views recover a silently missed bid through periodic reconciliation",
+      "passed": true
+    },
+    {
+      "scenario": "Simultaneous equal bid submissions yield one accepted fixture bid and identical rankings in all public views",
+      "passed": true
+    },
+    {
+      "scenario": "Live bids remain visible during a delayed dashboard reconciliation and survive its stale response",
+      "passed": true
+    },
+    {
+      "scenario": "A delayed queue response cannot undo a newer event transition",
+      "passed": true
+    },
+    {
+      "scenario": "Administration refreshes while the bid stream is still running",
+      "passed": true,
+      "requests": 2
+    },
+    {
+      "scenario": "Slow administration reads do not overlap and eventually show the newest bid",
+      "passed": true,
+      "peakConcurrentReads": 1,
+      "requests": 4
+    },
+    {
+      "scenario": "An established socket with a delayed snapshot is not shown as Live and cannot bid",
+      "passed": true
+    },
+    {
+      "scenario": "Bid-before-registration delivery resolves to the same participant name in every public view",
+      "passed": true
+    },
+    {
+      "scenario": "Event end reconciles final leaderboard and disables both participant forms",
+      "passed": true
+    }
+  ],
+  "exceptions": [
+    {
+      "view": "presentation",
+      "errors": []
+    },
+    {
+      "view": "admin",
+      "errors": []
+    },
+    {
+      "view": "bidder1",
+      "errors": []
+    },
+    {
+      "view": "bidder2",
+      "errors": []
+    }
+  ]
+}

@@ -8,6 +8,15 @@ import {
 } from "./auction-live-state";
 
 describe("live auction state", () => {
+  it("repairs participant names when a bid notification arrives before registration", () => {
+    const bidFirst = applyBidInsert(emptyAuctionLiveState(), {
+      id: "b1", auction_id: "a1", participant_id: "p1", amount: 50, created_at: "2026-11-11T12:00:00Z",
+    }, { winner_count: 1, status: "active" });
+    const registered = applyParticipantInsert(bidFirst, { id: "p1", auction_id: "a1", username: "Mia" });
+    expect(registered.leaderboard[0].username).toBe("Mia");
+    expect(registered.bids[0].username).toBe("Mia");
+    expect(registered.participantCount).toBe(1);
+  });
   it("counts each participant event once", () => {
     const participant = { id: "p1", auction_id: "a1", username: "Mia" };
     const once = applyParticipantInsert(emptyAuctionLiveState(), participant);

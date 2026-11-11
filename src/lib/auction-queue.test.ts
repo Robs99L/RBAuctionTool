@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyAuctionQueueEvent,
   moveAuctionInQueue,
   selectCurrentAuction,
   selectNextAuction,
@@ -29,6 +30,15 @@ function lot(id: string, sortOrder: number, status: Auction["status"]): Auction 
 }
 
 describe("auction queue", () => {
+  it("replays newer queue events over a delayed queue response", () => {
+    const oldQueue = [lot("first", 1, "active"), lot("next", 2, "upcoming"), lot("deleted", 3, "upcoming")];
+    let queue = applyAuctionQueueEvent(oldQueue, { kind: "upsert", auction: lot("first", 1, "ended") });
+    queue = applyAuctionQueueEvent(queue, { kind: "upsert", auction: lot("next", 2, "active") });
+    queue = applyAuctionQueueEvent(queue, { kind: "delete", id: "deleted" });
+    expect(selectParticipantAuction(queue)?.id).toBe("next");
+    expect(queue.find(auction => auction.id === "first")?.status).toBe("ended");
+    expect(queue.some(auction => auction.id === "deleted")).toBe(false);
+  });
   it("moves an auction by swapping its stable queue position", () => {
     const auctions = [
       lot("first", 10, "upcoming"),

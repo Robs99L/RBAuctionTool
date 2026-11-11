@@ -125,12 +125,15 @@ export function applyParticipantInsert(
   record: LiveParticipantInsert,
 ): AuctionLiveState {
   if (!record.id || state.participantNames[record.id]) return state;
+  const username = record.username || "Unknown participant";
   return {
     ...state,
+    bids: state.bids.map((bid) => bid.participant_id === record.id ? { ...bid, username } : bid),
+    leaderboard: state.leaderboard.map((entry) => entry.participant_id === record.id ? { ...entry, username } : entry),
     participantCount: state.participantCount + 1,
     participantNames: {
       ...state.participantNames,
-      [record.id]: record.username || "Unknown participant",
+      [record.id]: username,
     },
   };
 }
