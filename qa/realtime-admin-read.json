@@ -1,0 +1,9 @@
+{
+  "checkedAt": "2026-11-11T21:56:52.762Z",
+  "mode": "Read-only local API against configured Supabase; locally signed session, no login or database writes",
+  "status": 200,
+  "auctions": 1,
+  "recentAdminBids": 0,
+  "fullLeaderboardEntries": 0,
+  "publicSnapshotHasEmail": false
+}

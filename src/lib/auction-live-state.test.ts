@@ -4,10 +4,48 @@ import {
   applyAuctionRules,
   applyBidInsert,
   applyParticipantInsert,
+  applyLiveAuctionEvents,
   emptyAuctionLiveState,
+  type LiveAuctionEvent,
 } from "./auction-live-state";
+import { selectWinningBids } from "./auction-winners";
 
 describe("live auction state", () => {
+  it("converges for 10,000 shuffled bid deliveries with duplicates and late registrations", () => {
+    const bids = Array.from({ length: 10_000 }, (_, i) => ({
+      id: `b${String(i).padStart(5, "0")}`, auction_id: "a1", participant_id: `p${i % 500}`,
+      amount: 10 + Math.floor(i / 500), created_at: new Date(1_700_000_000_000 + i).toISOString(),
+    }));
+    const events: LiveAuctionEvent[] = [
+      ...[...bids].reverse().flatMap(record => [{ kind: "bid" as const, record }, { kind: "bid" as const, record }]),
+      ...Array.from({ length: 500 }, (_, i) => ({
+        kind: "participant" as const, record: { id: `p${i}`, auction_id: "a1", username: `Bidder ${i}` },
+      })),
+    ];
+    const rules = { winner_count: 12, status: "active" as const };
+    const allAtOnce = applyLiveAuctionEvents(emptyAuctionLiveState(), events, rules);
+    let inChunks = emptyAuctionLiveState();
+    for (let i = 0; i < events.length; i += 137) {
+      inChunks = applyLiveAuctionEvents(inChunks, events.slice(i, i + 137), rules);
+    }
+    expect(inChunks).toEqual(allAtOnce);
+    expect(allAtOnce.participantCount).toBe(500);
+    expect(allAtOnce.bids).toHaveLength(30);
+    expect(allAtOnce.leaderboard.map(entry => entry.bid_id)).toEqual(selectWinningBids(bids, 500).map(bid => bid.id));
+    expect(allAtOnce.leaderboard.filter(entry => entry.is_winner)).toHaveLength(12);
+    expect(allAtOnce.leaderboard.every(entry => entry.username === `Bidder ${entry.participant_id.slice(1)}`)).toBe(true);
+    expect(applyLiveAuctionEvents(allAtOnce, events.slice(0, 10), rules)).toBe(allAtOnce);
+  });
+
+  it("replays a pending burst over a stale snapshot with updated winner rules", () => {
+    const events: LiveAuctionEvent[] = [
+      { kind: "bid", record: { id: "b2", auction_id: "a1", participant_id: "p2", amount: 50, created_at: "2026-11-11T12:00:00Z" } },
+      { kind: "bid", record: { id: "b1", auction_id: "a1", participant_id: "p1", amount: 50, created_at: "2026-11-11T12:00:00Z" } },
+    ];
+    const final = applyLiveAuctionEvents(emptyAuctionLiveState(), events, { winner_count: 2, status: "ended" });
+    expect(final.leaderboard.map(entry => entry.bid_id)).toEqual(["b1", "b2"]);
+    expect(final.leaderboard.every(entry => entry.is_winner && entry.is_final)).toBe(true);
+  });
   it("repairs participant names when a bid notification arrives before registration", () => {
     const bidFirst = applyBidInsert(emptyAuctionLiveState(), {
       id: "b1", auction_id: "a1", participant_id: "p1", amount: 50, created_at: "2026-11-11T12:00:00Z",

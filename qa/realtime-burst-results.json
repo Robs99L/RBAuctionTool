@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-11T22:00:01.001Z",
+  "mode": "Isolated local production browser, HTTP/Realtime fixtures; no Supabase writes or real service load test",
+  "results": [
+    {
+      "scenario": "Four independent browser contexts load the same active auction and become live",
+      "passed": true
+    },
+    {
+      "scenario": "1,000 bids / 2,000 shuffled duplicated notifications per view appear before two-second stale snapshots finish",
+      "passed": true,
+      "timing": [
+        {
+          "view": "presentation",
+          "deliveryMs": 120.40000000596046,
+          "visibleMs": 176.69999998807907
+        },
+        {
+          "view": "admin",
+          "deliveryMs": 108.7000000178814,
+          "visibleMs": 302.2000000178814
+        },
+        {
+          "view": "bidder1",
+          "deliveryMs": 120,
+          "visibleMs": 268.7000000178814
+        },
+        {
+          "view": "bidder2",
+          "deliveryMs": 97.69999998807907,
+          "visibleMs": 235.69999998807907
+        }
+      ]
+    },
+    {
+      "scenario": "After stale responses: presentation Top 12, full 300-person bidder ranking and latest 500 admin history rows agree",
+      "passed": true
+    },
+    {
+      "scenario": "Another 1,000 bids in a sustained stream: all views converge, no overlapping protected reads, same 12 winners",
+      "passed": true,
+      "protectedReads": 1,
+      "peakConcurrentReads": 1
+    },
+    {
+      "scenario": "600 consecutive bids by one participant: older winning bidders remain ranked and the admin donation total includes winners absent from its 500 recent rows",
+      "passed": true
+    },
+    {
+      "scenario": "Realtime winner-count update expands presentation to Top 15",
+      "passed": true
+    },
+    {
+      "scenario": "Event end immediately disables both bidder forms and survives older active snapshots in all views",
+      "passed": true
+    },
+    {
+      "scenario": "An unsaved new-event form remains selected during unrelated live traffic",
+      "passed": true
+    }
+  ],
+  "failures": []
+}

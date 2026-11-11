@@ -1,10 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
+import { applyAdminLiveEvents, emptyAdminLiveState, replayAdminSnapshot, type AdminBid, type AdminLiveEvent, type AdminLiveState } from "@/lib/admin-live-state";
+import { emptyAuctionLiveState, normalizeAuctionDashboard, type LiveParticipantInsert } from "@/lib/auction-live-state";
+import { createLiveEventBatcher } from "@/lib/live-event-batcher";
 import { createRefreshScheduler } from "@/lib/refresh-scheduler";
-import { moveAuctionInQueue, orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
+import { applyAuctionQueueEvent, moveAuctionInQueue, orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
 import { AUCTION_START_COUNTDOWN_SECONDS } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { summarizeDonations, type DonationTotal } from "@/lib/donation-summary";
@@ -21,17 +24,9 @@ import { formatMoney, formatTime } from "@/lib/format";
 import { getSupabaseBrowserClient, hasSupabaseBrowserConfig } from "@/lib/supabase-browser";
 import type {
   Auction,
+  LeaderboardEntry,
   WinnerReportEntry,
 } from "@/lib/types";
-
-type AdminBid = {
-  id: string;
-  participant_id: string;
-  amount: number;
-  created_at: string;
-  username: string;
-  email: string;
-};
 
 type FormState = {
   title: string;
@@ -222,61 +217,102 @@ function AdminLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
 }
 
 function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
-  const [auctions, setAuctions] = useState<Auction[]>([]);
-  const [auction, setAuction] = useState<Auction | null>(null);
-  const [bids, setBids] = useState<AdminBid[]>([]);
-  const [donationTotals, setDonationTotals] = useState<DonationTotal[]>([]);
-  const [winnerReport, setWinnerReport] = useState<WinnerReportEntry[]>([]);
+  const [dashboard, setDashboard] = useState(emptyAdminLiveState);
+  const { auctions, auction, bids, donationTotals, winnerReport } = dashboard;
+  const dashboardRef = useRef(dashboard);
+  const liveEventsRef = useRef<AdminLiveEvent[]>([]);
+  const pendingLoadRef = useRef<number | null>(null);
+  const loadInFlightRef = useRef<{ auctionId?: string; requestId: number; promise: Promise<void> } | null>(null);
+  const liveBatcherRef = useRef<ReturnType<typeof createLiveEventBatcher<AdminLiveEvent>> | null>(null);
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [snapshotReady, setSnapshotReady] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   const selectedAuctionIdRef = useRef<string | null>(null);
+  const creatingAuctionRef = useRef(false);
   const loadRequestRef = useRef(0);
   const liveRefreshRef = useRef<ReturnType<typeof createRefreshScheduler> | null>(null);
   const suppressAuctionRefreshUntilRef = useRef(0);
 
-  const load = useCallback(async (auctionId?: string, preserveForm = false) => {
+  const commitDashboard = useCallback((next: AdminLiveState) => {
+    dashboardRef.current = next;
+    setDashboard(next);
+  }, []);
+  const setAuctions = (next: Auction[]) => commitDashboard({ ...dashboardRef.current, auctions: next });
+  const setAuction = (next: Auction | null) => commitDashboard({ ...dashboardRef.current, auction: next });
+  const setBids = (next: AdminBid[]) => commitDashboard({ ...dashboardRef.current, bids: next, loadedAuctionId: null, standings: emptyAuctionLiveState() });
+
+  const load = useCallback((auctionId?: string, preserveForm = false): Promise<void> => {
+    if (!preserveForm) creatingAuctionRef.current = false;
+    const existing = loadInFlightRef.current;
+    if (existing && existing.auctionId === auctionId) return existing.promise;
     const requestId = ++loadRequestRef.current;
+    liveBatcherRef.current?.flush();
+    pendingLoadRef.current = requestId;
+    liveEventsRef.current = [];
     if (auctionId && !preserveForm) selectedAuctionIdRef.current = auctionId;
-    try {
-      const query = auctionId ? `?auctionId=${encodeURIComponent(auctionId)}` : "";
-      const response = await fetch(`/api/admin/auction${query}`, {
-        cache: "no-store", signal: AbortSignal.timeout(10_000),
-      });
-      const data = (await response.json()) as {
-        auctions?: Auction[];
-        auction?: Auction | null;
-        bids?: Array<Record<string, unknown>>;
-        donationTotals?: Array<Record<string, unknown>>;
-        winnerReport?: Array<Record<string, unknown>>;
-        error?: string;
-      };
-      if (response.status === 401) {
-        onSignedOut();
-        return;
+    const request = (async () => {
+      try {
+        const query = auctionId ? `?auctionId=${encodeURIComponent(auctionId)}` : "";
+        const response = await fetch(`/api/admin/auction${query}`, {
+          cache: "no-store", signal: AbortSignal.timeout(10_000),
+        });
+        const data = (await response.json()) as {
+          auctions?: Auction[];
+          auction?: Auction | null;
+          bids?: Array<Record<string, unknown>>;
+          donationTotals?: Array<Record<string, unknown>>;
+          winnerReport?: Array<Record<string, unknown>>;
+          participants?: LiveParticipantInsert[];
+        dashboard?: unknown;
+          error?: string;
+        };
+        if (response.status === 401) {
+          onSignedOut();
+          return;
+        }
+        if (!response.ok) throw new Error(data.error ?? "Could not load the event queue.");
+        if (requestId !== loadRequestRef.current) return;
+        const publicSnapshot = data.auction
+          ? normalizeAuctionDashboard(data.dashboard, row => normalizedAuction(row as Auction)) : null;
+        const next = replayAdminSnapshot({
+          auctions: publicSnapshot
+            ? applyAuctionQueueEvent((data.auctions ?? []).map(normalizedAuction), { kind: "upsert", auction: publicSnapshot.auction })
+            : orderAuctions((data.auctions ?? []).map(normalizedAuction)),
+          auction: publicSnapshot?.auction ?? null,
+          bids: mapAdminBids(data.bids),
+          donationTotals: mapDonationTotals(data.donationTotals),
+          winnerReport: mapWinnerReport(data.winnerReport),
+          participantNames: {}, loadedAuctionId: data.auction?.id ?? null,
+          standings: publicSnapshot?.liveState ?? emptyAuctionLiveState(),
+        }, data.participants ?? [], liveEventsRef.current);
+        liveBatcherRef.current?.cancel();
+        const selected = next.auction;
+        selectedAuctionIdRef.current = selected?.id ?? null;
+        commitDashboard(next);
+        setSnapshotReady(true);
+        if (!preserveForm) setForm(selected ? formFromAuction(selected) : emptyForm);
+      } catch (loadError) {
+        if (requestId !== loadRequestRef.current) return;
+        setSnapshotReady(false);
+        setMessage({
+          kind: "error",
+          text: loadError instanceof Error ? loadError.message : "Could not load the event queue.",
+        });
+      } finally {
+        if (requestId === loadRequestRef.current) {
+          setLoading(false);
+          pendingLoadRef.current = null;
+          liveEventsRef.current = [];
+        }
+        if (loadInFlightRef.current?.requestId === requestId) loadInFlightRef.current = null;
       }
-      if (!response.ok) throw new Error(data.error ?? "Could not load the event queue.");
-      if (requestId !== loadRequestRef.current) return;
-      const nextAuctions = orderAuctions((data.auctions ?? []).map(normalizedAuction));
-      const selected = data.auction ? normalizedAuction(data.auction) : null;
-      selectedAuctionIdRef.current = selected?.id ?? null;
-      setAuctions(nextAuctions);
-      setAuction(selected);
-      if (!preserveForm) setForm(selected ? formFromAuction(selected) : emptyForm);
-      setBids(mapAdminBids(data.bids));
-      setDonationTotals(mapDonationTotals(data.donationTotals));
-      setWinnerReport(mapWinnerReport(data.winnerReport));
-    } catch (loadError) {
-      if (requestId !== loadRequestRef.current) return;
-      setMessage({
-        kind: "error",
-        text: loadError instanceof Error ? loadError.message : "Could not load the event queue.",
-      });
-    } finally {
-      if (requestId === loadRequestRef.current) setLoading(false);
-    }
-  }, [onSignedOut]);
+    })();
+    loadInFlightRef.current = { auctionId, requestId, promise: request };
+    return request;
+  }, [commitDashboard, onSignedOut]);
 
   useEffect(() => {
     const initialLoad = window.setTimeout(() => void load(), 0);
@@ -284,13 +320,23 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   }, [load]);
 
   useEffect(() => {
-    const scheduler = createRefreshScheduler(async () => {
-      if (Date.now() < suppressAuctionRefreshUntilRef.current) return;
-      await load(selectedAuctionIdRef.current ?? undefined, true);
+    const batcher = createLiveEventBatcher<AdminLiveEvent>(events => {
+      commitDashboard(applyAdminLiveEvents(dashboardRef.current, events));
     });
+    liveBatcherRef.current = batcher;
+    const scheduler = createRefreshScheduler(async () => {
+      if (creatingAuctionRef.current || Date.now() < suppressAuctionRefreshUntilRef.current) return;
+      await load(selectedAuctionIdRef.current ?? undefined, true);
+    }, 1_000);
     liveRefreshRef.current = scheduler;
     const refresh = () => scheduler.request();
     const recover = () => scheduler.request(true);
+    const accept = (event: AdminLiveEvent) => {
+      if (pendingLoadRef.current !== null) liveEventsRef.current.push(event);
+      batcher.push(event);
+      refresh();
+    };
+    const offline = () => setLiveConnected(false);
     const whenVisible = () => {
       if (document.visibilityState === "visible") recover();
     };
@@ -301,23 +347,44 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
     const client = getSupabaseBrowserClient();
     const channel = client
       .channel("admin-auction-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, recover)
-      .on("postgres_changes", { event: "*", schema: "public", table: "bids" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, payload => {
+        accept({ kind: "queue", event: payload.eventType === "DELETE"
+          ? { kind: "delete", id: String(payload.old.id) }
+          : { kind: "upsert", auction: normalizedAuction(payload.new as Auction) } });
+        recover();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "bids", select: ["id", "auction_id", "participant_id", "amount", "created_at"] }, payload => {
+        const row = payload.new;
+        accept({ kind: "bid", record: {
+          id: String(row.id), auction_id: String(row.auction_id), participant_id: String(row.participant_id),
+          amount: Number(row.amount), created_at: String(row.created_at),
+        } });
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "participants", select: ["id", "auction_id", "username"] }, payload => {
+        accept({ kind: "participant", record: {
+          id: String(payload.new.id), auction_id: String(payload.new.auction_id), username: String(payload.new.username),
+        } });
+      })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") recover();
+        if (status === "SUBSCRIBED") { setLiveConnected(true); recover(); }
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") offline();
       });
     window.addEventListener("online", recover);
+    window.addEventListener("offline", offline);
     document.addEventListener("visibilitychange", whenVisible);
 
     return () => {
       window.clearInterval(interval);
       scheduler.dispose();
+      batcher.dispose();
+      if (liveBatcherRef.current === batcher) liveBatcherRef.current = null;
       if (liveRefreshRef.current === scheduler) liveRefreshRef.current = null;
       window.removeEventListener("online", recover);
+      window.removeEventListener("offline", offline);
       document.removeEventListener("visibilitychange", whenVisible);
       void client.removeChannel(channel);
     };
-  }, [load]);
+  }, [commitDashboard, load]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -490,6 +557,8 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
   }
 
   function selectAuction(id: string) {
+    liveBatcherRef.current?.flush();
+    setSnapshotReady(false);
     selectedAuctionIdRef.current = id;
     const selected = auctions.find((item) => item.id === id);
     if (selected) {
@@ -508,16 +577,22 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       auctions={auctions}
       auction={auction}
       bids={bids}
+      leaderboard={dashboard.standings.leaderboard}
       donationTotals={donationTotals}
       winnerReport={winnerReport}
       form={form}
       message={message}
       saving={saving}
+      connection={liveConnected ? snapshotReady ? "live" : "connecting" : "offline"}
       onFormChange={setForm}
       onSelect={selectAuction}
       onNew={() => {
+        liveBatcherRef.current?.flush();
+        creatingAuctionRef.current = true;
         selectedAuctionIdRef.current = null;
         loadRequestRef.current += 1;
+        pendingLoadRef.current = null;
+        liveEventsRef.current = [];
         setAuction(null);
         setForm(emptyForm);
         setBids([]);
@@ -827,12 +902,14 @@ function AuctionManagerView({
   auctions,
   auction,
   bids,
+  leaderboard,
   donationTotals,
   winnerReport,
   form,
   message,
   saving,
   demo = false,
+  connection = "live",
   onFormChange,
   onSelect,
   onNew,
@@ -848,12 +925,14 @@ function AuctionManagerView({
   auctions: Auction[];
   auction: Auction | null;
   bids: AdminBid[];
+  leaderboard?: LeaderboardEntry[];
   donationTotals: DonationTotal[];
   winnerReport: WinnerReportEntry[];
   form: FormState;
   message: Message;
   saving: boolean;
   demo?: boolean;
+  connection?: "live" | "connecting" | "offline";
   onFormChange: (form: FormState) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
@@ -891,8 +970,9 @@ function AuctionManagerView({
   const [confirmation, setConfirmation] = useState<"start" | "end" | "delete" | null>(null);
 
   const winningRanks = new Map(
-    (auction ? selectWinningBids(bids, auction.winner_count) : [])
-      .map((bid) => [bid.id, bid.rank]),
+    leaderboard
+      ? leaderboard.filter(entry => entry.is_winner).map(entry => [entry.bid_id, entry.bidder_rank])
+      : (auction ? selectWinningBids(bids, auction.winner_count) : []).map(bid => [bid.id, bid.rank]),
   );
 
   function updateField(field: keyof FormState, value: string) {
@@ -1120,6 +1200,8 @@ function AuctionManagerView({
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected event</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid history</h2>
+              {!demo && <p className="mt-1 text-xs text-ink/45">Latest 500 accepted bids; winner ranks use the complete leaderboard.</p>}
+              {!demo && <p className="mt-1 text-xs text-ink/60" role="status">{connection === "live" ? "Live" : connection === "connecting" ? "Synchronizing…" : "Reconnecting…"}</p>}
               {auction && (
                 <div className="mt-1 space-y-1 text-xs text-ink/45">
                   <p>Top {auction.winner_count} distinct {auction.winner_count === 1 ? "bidder wins" : "bidders win"}</p>
@@ -1133,22 +1215,7 @@ function AuctionManagerView({
           </div>
           {bids.length && auction ? (
             <ol className="mt-5 divide-y divide-ink/10">
-              {bids.map((bid) => {
-                const winningRank = winningRanks.get(bid.id);
-                return (
-                <li key={bid.id} className="flex items-start justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold">
-                      <span className="max-w-full truncate">{bid.username}</span>
-                      {winningRank && <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
-                    </p>
-                    <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
-                    {bid.email && <p className="mt-0.5 truncate text-xs text-ink/45">{bid.email}</p>}
-                  </div>
-                  <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{formatMoney(bid.amount, auction.currency)}</strong>
-                </li>
-                );
-              })}
+              {bids.map(bid => <AdminBidRow key={bid.id} bid={bid} winningRank={winningRanks.get(bid.id)} currency={auction.currency} />)}
             </ol>
           ) : (
             <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No accepted bids for this event yet.</div>
@@ -1231,6 +1298,24 @@ function AuctionManagerView({
     </div>
   );
 }
+
+const AdminBidRow = memo(function AdminBidRow({ bid, winningRank, currency }: {
+  bid: AdminBid; winningRank?: number; currency: string;
+}) {
+  return (
+    <li className="flex items-start justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold">
+          <span className="max-w-full truncate">{bid.username}</span>
+          {winningRank && <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
+        </p>
+        <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
+        {bid.email && <p className="mt-0.5 truncate text-xs text-ink/45">{bid.email}</p>}
+      </div>
+      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{formatMoney(bid.amount, currency)}</strong>
+    </li>
+  );
+});
 
 function AdminNotConfigured() {
   return (

@@ -143,56 +143,56 @@ export function applyBidInsert(
   record: LiveBidInsert,
   auction: Pick<Auction, "winner_count" | "status">,
 ): AuctionLiveState {
-  if (
-    !record.id ||
-    state.bids.some((bid) => bid.id === record.id) ||
-    state.leaderboard.some((entry) => entry.bid_id === record.id)
-  ) {
-    return state;
+  return applyLiveAuctionEvents(state, [{ kind: "bid", record }], auction);
+}
+
+/** Process the entire delivery burst before sorting and assigning ranks once. */
+export function applyLiveAuctionEvents(
+  state: AuctionLiveState,
+  events: readonly LiveAuctionEvent[],
+  auction: Pick<Auction, "winner_count" | "status">,
+): AuctionLiveState {
+  if (!events.length) return state;
+  const names = { ...state.participantNames };
+  let participantCount = state.participantCount;
+  let changed = false;
+  for (const event of events) {
+    if (event.kind !== "participant" || !event.record.id || names[event.record.id]) continue;
+    names[event.record.id] = event.record.username || "Unknown participant";
+    participantCount += 1;
+    changed = true;
   }
-
-  const existingEntry = state.leaderboard.find(
-    (entry) => entry.participant_id === record.participant_id,
-  );
-  const username =
-    record.username ??
-    state.participantNames[record.participant_id] ??
-    existingEntry?.username ??
-    "Unknown participant";
-  const bid: Bid = { ...record, username };
-  const bids = [bid, ...state.bids].sort(recentBidOrder).slice(0, 30);
-
-  let leaderboard = state.leaderboard;
-  const improvesParticipantBest =
-    !existingEntry ||
-    record.amount > existingEntry.amount ||
-    (
-      record.amount === existingEntry.amount &&
-      (
-        record.created_at < existingEntry.created_at ||
-        (record.created_at === existingEntry.created_at && record.id < existingEntry.bid_id)
-      )
-    );
-
-  if (improvesParticipantBest) {
-    const nextEntry: LeaderboardEntry = {
-      bid_id: record.id,
-      participant_id: record.participant_id,
-      username,
-      amount: record.amount,
-      created_at: record.created_at,
-      bidder_rank: 0,
-      is_winner: false,
-      is_final: auction.status === "ended",
-    };
-    leaderboard = existingEntry
-      ? state.leaderboard.map((entry) => (
-        entry.participant_id === record.participant_id ? nextEntry : entry
-      ))
-      : [...state.leaderboard, nextEntry];
+  const best = new Map(state.leaderboard.map(entry => [entry.participant_id, entry]));
+  const recent = new Map(state.bids.map(bid => [bid.id, bid]));
+  const seen = new Set([...recent.keys(), ...state.leaderboard.map(entry => entry.bid_id)]);
+  for (const event of events) {
+    if (event.kind !== "bid" || !event.record.id || seen.has(event.record.id)) continue;
+    const record = event.record;
+    seen.add(record.id);
+    changed = true;
+    const existing = best.get(record.participant_id);
+    const username = record.username ?? names[record.participant_id] ?? existing?.username ?? "Unknown participant";
+    recent.set(record.id, { ...record, username });
+    if (!existing || leaderboardOrder({
+      ...existing, bid_id: record.id, amount: record.amount, created_at: record.created_at,
+    }, existing) < 0) {
+      best.set(record.participant_id, {
+        bid_id: record.id, participant_id: record.participant_id, username,
+        amount: record.amount, created_at: record.created_at,
+        bidder_rank: 0, is_winner: false, is_final: auction.status === "ended",
+      });
+    }
   }
-
-  return applyAuctionRules({ ...state, bids, leaderboard }, auction);
+  if (!changed) return state;
+  const resolveName = <T extends { participant_id: string; username: string }>(entry: T): T => {
+    const username = names[entry.participant_id];
+    return username && entry.username !== username ? { ...entry, username } : entry;
+  };
+  return applyAuctionRules({
+    bids: [...recent.values()].sort(recentBidOrder).slice(0, 30).map(resolveName),
+    leaderboard: [...best.values()].map(resolveName),
+    participantCount, participantNames: names,
+  }, auction);
 }
 
 export function applyLiveAuctionEvent(

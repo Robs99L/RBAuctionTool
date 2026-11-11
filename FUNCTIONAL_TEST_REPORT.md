@@ -2,6 +2,24 @@
 
 Stand: 11. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
+## Viele gleichzeitig eintreffende Gebote
+
+Admin, Bieter und Präsentation verarbeiten Live-Nachrichten jetzt in festen 16-Millisekunden-Fenstern. Die Rangliste wird für einen ganzen Nachrichtenschub berechnet, statt jede Nachricht einzeln vollständig zu sortieren und an React zu übergeben. Ein fortlaufender Gebotsstrom verschiebt das Aktualisierungsfenster nicht. Die Administration übernimmt Gebote und Teilnehmernamen direkt aus Realtime; langsame geschützte Ladeantworten blockieren die Liveanzeige nicht. Während einer Anfrage eingehende Gebote und Eventänderungen werden über deren Antwort gelegt. Private Kontaktinformationen und finale Berichte werden weiterhin ausschließlich geschützt geladen, mit einer Sekunde Bündelung und ohne überlappende Hintergrundabrufe. Gleichzeitige Initialabrufe desselben Events werden zusammengefasst. Unveränderte Adminzeilen rendern nicht erneut; Formatierer für Beträge und Uhrzeiten werden wiederverwendet.
+
+Beim Abgleich mit den bestehenden Migrationen wurde eine weitere wichtige Grenze gefunden: `get_auction_admin_bids` liefert nur die letzten 500 Gebote. Die Administration verwendet deshalb zusätzlich denselben vollständigen öffentlichen Dashboard-Snapshot wie Bieter und Präsentation. Gewinnerkennzeichnungen und Spendensummen basieren auf dieser vollständigen Rangliste, auch wenn ältere Gewinnergebote im sichtbaren Verlauf fehlen. Der Adminverlauf bleibt bei den letzten 500 angenommenen Geboten; diese Grenze wird angezeigt. Frühere Aussagen in diesem Bericht über einen vollständigen Adminverlauf waren unzutreffend. Auch nach dem Eventende darf eine verspätete Antwort die Spendensumme nicht gegenüber den angezeigten Gewinnern zurücksetzen.
+
+| Abschließende Prüfung | Ergebnis |
+| --- | --- |
+| 101 automatisierte Tests in 19 Dateien; TypeScript, ESLint und isolierter Produktionsbuild | Bestanden |
+| 10.000 Gebote mit doppelten, vertauschten Nachrichten und verspäteten Teilnehmernamen | Dieselben Ränge und Gewinner bei Gesamtverarbeitung und Verarbeitung in Teilmengen |
+| Vier unabhängige Browserkontexte, 300 simulierte Teilnehmer, 1.000 Gebote / 2.000 Nachrichten pro Ansicht, zwei Sekunden verzögerte Snapshots | Aktualisierung des DOM nach rund 177 ms in der Präsentation, 302 ms im Admin und 269 beziehungsweise 236 ms bei den Bietern; aktueller Stand vor Abschluss der alten Antworten |
+| Weitere 1.000 Gebote in einem fortlaufenden Strom | Alle Ansichten stimmen überein; maximal eine geschützte Hintergrundanfrage gleichzeitig |
+| 600 weitere Gebote desselben Teilnehmers | Ältere Gewinner bleiben in der vollständigen Rangliste und in der Admin-Spendensumme, obwohl sie im 500-Zeilen-Verlauf fehlen |
+| Gewinnerzahl von 12 auf 15 ändern, Event während laufender Anfragen beenden, neues Adminformular bei weiterer Live-Nachricht | Alle drei Fälle bestanden; finale Ansicht bleibt erhalten, beide Gebotseingaben gesperrt, neues Formular bleibt ausgewählt |
+| Neue geschützte Adminantwort gegen die konfigurierte Supabase-Anbindung ausschließlich lesend | HTTP 200; ein Event, keine vorhandenen Gebote; vollständiger öffentlicher Snapshot vorhanden und ohne E-Mail-Felder |
+
+Browserergebnisse: [Gebotsschübe](qa/realtime-burst-results.json). Lesender API-Nachweis: [Adminabruf](qa/realtime-admin-read.json). Der reproduzierbare Browserprüflauf liegt in `scripts/qa-realtime-bursts.mjs`. Es wurden keine produktiven Gebote, Registrierungen oder Eventwechsel durchgeführt. Die Browserprüfung simuliert die Zustellung bereits angenommener Gebote; sie misst weder konkurrierende PostgreSQL-Transaktionen noch die tatsächliche Kapazität von Supabase Free oder Netlify Free. Die genannten DOM-Zeiten gelten für den lokalen Prüflauf und enthalten keine echte Internet- oder Supabase-Verteilungsverzögerung. Die nachfolgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Verstärkte Synchronisierung
 
 Auf ausdrücklichen Nutzerwunsch wurde die Synchronisierung erneut geprüft und verstärkt. Alle drei View-Typen verwenden eine gemeinsame Anwendungsserverzeit für ihre Timer. Die Zeitkalibrierung berücksichtigt die halbe gemessene Anfragezeit und verwendet anschließend eine monotone Uhr. Falsch eingestellte Geräteuhren verschieben damit den Countdown nicht mehr. Die Serverzeit wird einmal pro Minute und beim Wiederverbinden beziehungsweise erneuten Sichtbarwerden abgeglichen; bis zur ersten erfolgreichen Kalibrierung bleibt die Gebotseingabe gesperrt.

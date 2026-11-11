@@ -15,7 +15,7 @@ import {
 } from "@/lib/product-image";
 import { optimizeProductImage } from "@/lib/product-image-server";
 import { validateAuctionInput } from "@/lib/auction-input";
-import { getSupabaseAdminClient } from "@/lib/supabase-admin";
+import { getSupabaseAdminClient, getSupabasePublicReadClient } from "@/lib/supabase-admin";
 
 function unauthorized() {
   return noStoreJson({ error: "Administrator authorization required." }, { status: 401 });
@@ -116,17 +116,22 @@ export async function GET(request: Request) {
       [...auctions].reverse().find((auction) => auction.status === "ended") ??
       null;
     let bids: unknown[] = [];
+    let dashboard: unknown = null;
     if (selected) {
-      const result = await client.rpc("get_auction_admin_bids", {
-        p_auction_id: selected.id,
-      });
+      const [result, dashboardResult] = await Promise.all([
+        client.rpc("get_auction_admin_bids", { p_auction_id: selected.id }),
+        getSupabasePublicReadClient().rpc("get_auction_dashboard", { p_auction_id: selected.id }),
+      ]);
       if (result.error) throw result.error;
+      if (dashboardResult.error) throw dashboardResult.error;
       bids = result.data ?? [];
+      dashboard = dashboardResult.data;
     }
     return noStoreJson({
       auctions,
       auction: selected,
       bids,
+      dashboard,
       donationTotals: donationResult.data ?? [],
       winnerReport: winnerReportResult.data ?? [],
     });

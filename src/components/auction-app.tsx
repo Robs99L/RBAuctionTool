@@ -10,13 +10,14 @@ import { PresentationView } from "@/components/presentation-view";
 import { RbLogo } from "@/components/rb-logo";
 import {
   applyAuctionRules,
-  applyLiveAuctionEvent,
+  applyLiveAuctionEvents,
   emptyAuctionLiveState,
   normalizeAuctionDashboard,
   type LiveAuctionEvent,
   type LiveBidInsert,
   type LiveParticipantInsert,
 } from "@/lib/auction-live-state";
+import { createLiveEventBatcher } from "@/lib/live-event-batcher";
 import { applyAuctionQueueEvent, selectNextAuction, selectParticipantAuction, type AuctionQueueEvent } from "@/lib/auction-queue";
 import { getAuctionNow } from "@/lib/auction-clock";
 import { useAuctionClock } from "@/lib/use-auction-clock";
@@ -138,6 +139,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   const auctionRef = useRef<Auction | null>(null);
   const liveStateRef = useRef(liveState);
   const liveEventBufferRef = useRef<LiveAuctionEvent[]>([]);
+  const liveBatcherRef = useRef<ReturnType<typeof createLiveEventBatcher<LiveAuctionEvent>> | null>(null);
   const snapshotGenerationRef = useRef(0);
   const snapshotRequestRef = useRef<{
     auctionId: string;
@@ -178,12 +180,30 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
     setLiveState(nextState);
   }, []);
 
+  useEffect(() => {
+    const batcher = createLiveEventBatcher<LiveAuctionEvent>((events) => {
+      const current = auctionRef.current;
+      if (!current) return;
+      commitLiveState(applyLiveAuctionEvents(
+        liveStateRef.current,
+        events.filter(event => event.record.auction_id === current.id),
+        current,
+      ));
+    });
+    liveBatcherRef.current = batcher;
+    return () => {
+      batcher.dispose();
+      if (liveBatcherRef.current === batcher) liveBatcherRef.current = null;
+    };
+  }, [commitLiveState]);
+
   const commitAuction = useCallback((nextAuction: Auction | null) => {
     const previousAuction = auctionRef.current;
     auctionRef.current = nextAuction;
     setAuction(nextAuction);
 
     if (!nextAuction || previousAuction?.id !== nextAuction.id) {
+      liveBatcherRef.current?.cancel();
       snapshotReadyAuctionIdRef.current = null;
       setSynchronizedAuctionId(null);
       auctionConnectedRef.current = false;
@@ -233,15 +253,14 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
     if (existingRequest?.auctionId === requestedAuctionId) return existingRequest.promise;
 
     const generation = ++snapshotGenerationRef.current;
+    liveBatcherRef.current?.flush();
     liveEventBufferRef.current = [];
 
     const replayBufferedEvents = (baseState: typeof liveState, snapshotAuction: Auction) => {
       const buffered = liveEventBufferRef.current;
       liveEventBufferRef.current = [];
-      return buffered.reduce(
-        (state, event) => applyLiveAuctionEvent(state, event, snapshotAuction),
-        baseState,
-      );
+      liveBatcherRef.current?.cancel();
+      return applyLiveAuctionEvents(baseState, buffered, snapshotAuction);
     };
 
     const request = (async () => {
@@ -315,8 +334,8 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
       liveEventBufferRef.current.push(event);
     }
     // Keep displaying live bids while a reconciliation request is in flight.
-    commitLiveState(applyLiveAuctionEvent(liveStateRef.current, event, currentAuction));
-  }, [commitLiveState]);
+    liveBatcherRef.current?.push(event);
+  }, []);
 
   const joinAuction = useCallback(async (username: string, email: string) => {
     if (!client || !auctionId) throw new Error("The auction is not available.");
