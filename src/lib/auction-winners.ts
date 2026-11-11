@@ -22,7 +22,10 @@ export function selectWinningBids<T extends RankedBidInput>(
     if (
       !current ||
       bid.amount > current.amount ||
-      (bid.amount === current.amount && bid.created_at < current.created_at)
+      (bid.amount === current.amount && (
+        bid.created_at < current.created_at ||
+        (bid.created_at === current.created_at && bid.id < current.id)
+      ))
     ) {
       highestByParticipant.set(bid.participant_id, bid);
     }

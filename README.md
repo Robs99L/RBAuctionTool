@@ -19,7 +19,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
-- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and live leaderboard; longer rankings rotate automatically
+- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and a fixed leaderboard showing the top 10 or all winning places when there are more than 10
 
 ## Local setup
 
@@ -32,7 +32,9 @@ npm run dev
 
 Open `http://localhost:3000`. Administration is at `http://localhost:3000/admin`.
 
-For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays public participant names and highest bids without requiring registration. Rankings with more than five bidders rotate every eight seconds. A periodic refresh also recovers missed event changes and bids. The local demo synchronizes with other tabs in the same browser.
+For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays public participant names and highest bids without requiring registration. It always shows the top 10, or up to the configured number of winners when that exceeds 10, with no automatic page changes. Large lists scroll within the desktop leaderboard. Event images retain their full 16:9 slide format across all three views; the login artwork uses its original responsive layout. A periodic refresh also recovers missed event changes and bids. The shared local demo synchronizes with other tabs in the same browser.
+
+For a standalone presentation preview with 12 sample bidders, open `/presentation?demo=true` in development. Add `&winners=12` to preview 12 winning places. This preview is independent of the shared demo and live auction, makes no Supabase requests, and is disabled in production.
 
 In development, missing Supabase environment variables automatically enable local demo mode. It includes a live sample lot, participants, bids, working bid submission, and an editable administration page. Demo changes are stored in the browser and can be reset from either page. Production fails closed with a configuration screen unless `NEXT_PUBLIC_DEMO_MODE=true` is set intentionally.
 

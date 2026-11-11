@@ -189,7 +189,8 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   }, [client, commitAuctions]);
 
   const refreshDashboard = useCallback(async () => {
-    const requestedAuctionId = auctionRef.current?.id;
+    const requestedAuction = auctionRef.current;
+    const requestedAuctionId = requestedAuction?.id;
     if (!client || !requestedAuctionId) return;
     const existingRequest = snapshotRequestRef.current;
     if (existingRequest?.auctionId === requestedAuctionId) return existingRequest.promise;
@@ -219,9 +220,16 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
       }
 
       const snapshot = normalizeAuctionDashboard(data, normalizeAuction);
-      const nextState = replayBufferedEvents(snapshot.liveState, snapshot.auction);
-      auctionRef.current = snapshot.auction;
-      setAuction(snapshot.auction);
+      // Queue updates received during this request are newer than its snapshot.
+      const currentAuction = auctionRef.current !== requestedAuction
+        ? auctionRef.current!
+        : snapshot.auction;
+      const nextState = applyAuctionRules(
+        replayBufferedEvents(snapshot.liveState, currentAuction),
+        currentAuction,
+      );
+      auctionRef.current = currentAuction;
+      setAuction(currentAuction);
       commitLiveState(nextState);
     })().catch((snapshotError: unknown) => {
       if (
@@ -599,6 +607,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
       <Header connection={connection} participantCount={participantCount} />
       {participant || effectiveStatus(auction) === "ended" ? (
         <AuctionRoom
+          key={auction.id}
           auction={auction}
           participant={participant}
           bids={bids}
@@ -716,13 +725,13 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
     const minimum = minimumNextBid(
       demoAuction.starting_price,
       demoAuction.minimum_increment,
-      demoBids[0]?.amount,
-      demoBids[0]?.participant_id === participant.id,
+      demoLeaderboard[0]?.amount,
+      demoLeaderboard[0]?.participant_id === participant.id,
     );
     const maximum = maximumNextBid(
       demoAuction.starting_price,
       demoAuction.maximum_bid_difference,
-      demoBids[0]?.amount,
+      demoLeaderboard[0]?.amount,
     );
     if (amount < minimum) {
       throw new Error(
@@ -750,7 +759,7 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
       created_at: nextBid.created_at,
       username: nextBid.username,
     } satisfies BidReceipt;
-  }, [commitState, demoAuction, demoBids, demoState, participant]);
+  }, [commitState, demoAuction, demoLeaderboard, demoState, participant]);
 
   const resetDemo = useCallback(() => {
     const next = createDemoAuctionState();
@@ -778,6 +787,7 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
       <Header connection="live" participantCount={demoParticipants.length} />
       {participant || effectiveStatus(demoAuction) === "ended" ? (
         <AuctionRoom
+          key={demoAuction.id}
           auction={demoAuction}
           participant={participant}
           bids={demoBids}
@@ -952,7 +962,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
   const status = effectiveStatus(auction);
   const biddingOpen = useBiddingOpen(status, auction.starts_at);
   const starting = status === "active" && !biddingOpen;
-  const highest = bids[0];
+  const highest = leaderboard[0];
   const isLeadingParticipant = highest?.participant_id === participant?.id;
   const minimum = minimumNextBid(
     auction.starting_price,

@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-11",
+  "mode": "isolated local shared demo; no production writes",
+  "results": [
+    {
+      "scenario": "Login retains responsive artwork",
+      "width": 756,
+      "height": 488,
+      "frame": {
+        "x": 0,
+        "y": -413,
+        "width": 741,
+        "height": 224,
+        "top": -413,
+        "right": 741,
+        "bottom": -189,
+        "left": 0
+      },
+      "fit": "cover"
+    },
+    {
+      "scenario": "Same event, highest bid and minimum despite reversed activity timestamps",
+      "passed": true,
+      "highest": 700,
+      "minimum": 725,
+      "topRows": 10
+    },
+    {
+      "scenario": "Invalid bid rejected, accepted bid syncs across views, leader may increase by one cent",
+      "passed": true
+    },
+    {
+      "scenario": "End action confirmation",
+      "buttons": [
+        "Cancel",
+        "End bidding"
+      ]
+    },
+    {
+      "scenario": "End bidding synchronizes final results",
+      "passed": true
+    },
+    {
+      "scenario": "Next event clears bid input, preserves identity, synchronizes 15-second countdown",
+      "passed": true,
+      "timers": [
+        "Bidding starts in 15 seconds",
+        "Bidding starts in 15 seconds",
+        "Bidding starts in 15 seconds"
+      ]
+    },
+    {
+      "scenario": "Bidding opens after shared start countdown",
+      "passed": true
+    },
+    {
+      "scenario": "Presentation layout and all 12 winner places",
+      "width": 1920,
+      "height": 1080,
+      "pageWidth": 1920,
+      "pageHeight": 1080,
+      "imageRatio": 1.777808919875276,
+      "imageFit": "contain",
+      "rows": 12,
+      "listHeight": 576,
+      "listScrollHeight": 576,
+      "lastBottom": 911,
+      "listBottom": 911,
+      "snow": 144
+    },
+    {
+      "scenario": "Presentation layout and all 12 winner places",
+      "width": 1280,
+      "height": 720,
+      "pageWidth": 1280,
+      "pageHeight": 720,
+      "imageRatio": 1.7777953170218364,
+      "imageFit": "contain",
+      "rows": 12,
+      "listHeight": 339,
+      "listScrollHeight": 339,
+      "lastBottom": 600,
+      "listBottom": 600,
+      "snow": 144
+    },
+    {
+      "scenario": "Leaderboard does not rotate pages",
+      "passed": true
+    },
+    {
+      "scenario": "bidder mobile layout",
+      "width": 390,
+      "scrollWidth": 390,
+      "imageRatio": 1.7777777777777777,
+      "exceptions": [],
+      "supabaseRequests": 0
+    },
+    {
+      "scenario": "admin mobile layout",
+      "width": 390,
+      "scrollWidth": 390,
+      "imageRatio": 1.7777777777777777,
+      "exceptions": [],
+      "supabaseRequests": 0
+    },
+    {
+      "scenario": "presentation mobile layout",
+      "width": 390,
+      "scrollWidth": 390,
+      "imageRatio": 1.7777777777777777,
+      "exceptions": [],
+      "supabaseRequests": 0
+    }
+  ]
+}

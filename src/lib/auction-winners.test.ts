@@ -25,4 +25,16 @@ describe("auction winners", () => {
     expect(selectWinningBids(bids, 0)).toEqual([]);
     expect(selectWinningBids(bids, 1.5)).toEqual([]);
   });
+
+  it("uses timestamp and bid ID to resolve ties independent of history order", () => {
+    const tied = [
+      { id: "c", participant_id: "a", amount: 80, created_at: "2026-10-15T10:03:00Z" },
+      { id: "b", participant_id: "b", amount: 80, created_at: "2026-10-15T10:03:00Z" },
+      { id: "a", participant_id: "a", amount: 80, created_at: "2026-10-15T10:03:00Z" },
+      { id: "d", participant_id: "c", amount: 80, created_at: "2026-10-15T10:04:00Z" },
+    ];
+    const expected = ["a", "b", "d"];
+    expect(selectWinningBids(tied, 3).map((bid) => bid.id)).toEqual(expected);
+    expect(selectWinningBids([...tied].reverse(), 3).map((bid) => bid.id)).toEqual(expected);
+  });
 });

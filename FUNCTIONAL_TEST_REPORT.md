@@ -2,6 +2,36 @@
 
 Stand: 11. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
+## Aktuelle Konsistenzprüfung zwischen den Ansichten
+
+Admin-, Bieter- und Präsentationsansicht wurden gemeinsam in drei Tabs einer isolierten lokalen Demo geprüft. Zusätzlich wurden verzögerte Supabase-Dashboardantworten und Realtime-Nachrichten im Browser simuliert. Produktive Daten wurden nicht verändert.
+
+Korrigiert wurden folgende Abweichungen:
+
+- Die Bieteransicht und ihre Gebotsgrenzen verwenden jetzt das höchste Gebot aus der vollständigen Rangliste. Der zeitlich jüngste Aktivitätseintrag kann bei verzögerten Nachrichten oder abweichender Transaktionsreihenfolge einen niedrigeren Betrag haben. Präsentation, Bieteransicht und lokale Gebotsvalidierung verwenden damit dieselbe Grundlage.
+- Eventupdates, die während einer Dashboardanfrage eintreffen, werden durch deren ältere Antwort nicht mehr zurückgesetzt. Der reproduzierte Fall „Event bereits beendet, verspätete Antwort noch aktiv“ bleibt jetzt beendet und zeigt finale Gewinnerkennzeichnungen.
+- Beim Wechsel auf ein anderes Event wird das alte Gebotseingabefeld samt Feedback zurückgesetzt. Die Teilnehmeridentität bleibt erhalten.
+- Bei identischen Beträgen und Zeitstempeln entscheidet auch die Admin-/Demo-Gewinnerauswahl anhand der Gebots-ID, entsprechend der Datenbank und der Live-Rangliste.
+- Die README beschreibt jetzt die feste Präsentationsrangliste: Top 10, bei mehr als 10 Gewinnerplätzen bis zur Anzahl der Gewinner. Die Liste wechselt keine Seiten. Der eigenständige Beispielmodus wird als Entwicklungsvorschau beschrieben.
+
+| Aktuelle Nachprüfung | Ergebnis |
+| --- | --- |
+| Automatisierte Tests | 82 bestanden, 15 Testdateien |
+| TypeScript, ESLint und isolierter Produktionsbuild | Bestanden |
+| Dasselbe aktive Event, höchstes Gebot, Gewinnerplätze und Gebotsgrenzen in den drei Ansichten | Bestanden mit lokalen Daten, auch bei umgekehrter Reihenfolge der Gebotszeitstempel |
+| Ungültiges Gebot, akzeptiertes Gebot, sofortige Rangänderung und Ein-Cent-Erhöhung durch den Führenden | Bestanden in der gemeinsamen Demo |
+| Manuelles Beenden, finale Ergebnisse, nächstes Event, fortgesetzte Identität und geleertes Eingabefeld | Bestanden in der gemeinsamen Demo |
+| Gemeinsamer 15-Sekunden-Startcountdown und anschließende Freigabe des Bietens | Bestanden; alle drei Timer zeigten denselben Countdown |
+| Verspäteter aktiver Snapshot nach dem Eventende | Bestanden mit simuliertem Realtime-Kanal; finaler Zustand bleibt erhalten |
+| Verpasster Eventwechsel und inkrementelles Neusortieren bei Live-Geboten | Bestanden mit simulierten Supabase-Antworten |
+| Lokaler Produktionsbuild mit `?demo=true&winners=12` | Zeigt die reguläre Live-Ansicht; Beispielmodus ist deaktiviert. Live-Regressionsfälle bestehen auch im Produktionsbuild |
+| Präsentation mit 12 Gewinnerplätzen bei 1920×1080 und 1280×720 | Alle 12 Zeilen passen ohne Seitenüberlauf; kein Seitenwechsel nach neun Sekunden |
+| Alle drei Ansichten bei 390×844 | Kein horizontaler Überlauf; Eventbilder behalten 16:9 und `object-fit: contain` |
+
+Die Darstellungsunterschiede entsprechen den jeweiligen Aufgaben: Die Präsentation begrenzt die öffentliche Liste auf Top 10 beziehungsweise alle Gewinnerplätze, die Bieteransicht zeigt die vollständige Rangliste samt persönlichem Rang und die Administration den vollständigen Gebotsverlauf. Die Administration kann ein anderes Event zur Bearbeitung auswählen; öffentliche Ansichten folgen gemeinsam dem aktiven Event und behalten danach dessen Ergebnisse sichtbar. Die Anmeldemaske bleibt ausdrücklich vom festen 16:9-Format ausgenommen.
+
+Die Browserprüfläufe erfassten keine unbehandelten Laufzeitfehler. Die gemeinsame Demo stellte keine Supabase-Anfragen. Ergebnisse: [Ansichten und Bedienabläufe](qa/consistency-results.json), [simulierte Live-Abläufe](qa/consistency-live-results.json), [lokaler Produktionsbuild](qa/consistency-production-results.json). Echte konkurrierende Datenbankgebote, produktive Schreibabläufe und Lasttests bleiben mangels separatem Testprojekt ungeprüft. Die nachfolgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Korrekturen und Nachprüfung
 
 Alle drei reproduzierten Fehler wurden am 11. November 2026 lokal korrigiert. Die README beschreibt die Spendensumme jetzt korrekt.

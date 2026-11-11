@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-11",
+  "mode": "browser fetch and Realtime fixtures; no production writes",
+  "results": [
+    {
+      "scenario": "Delayed active snapshot cannot overwrite newer ended queue update or final winner flags",
+      "passed": true
+    },
+    {
+      "scenario": "Missed live event change reloads queue and new event leaderboard",
+      "passed": true
+    },
+    {
+      "scenario": "Incremental bid insertion reranks presentation by amount despite older timestamp",
+      "passed": true
+    }
+  ],
+  "exceptions": []
+}
