@@ -1,6 +1,6 @@
 # RBAuctionTool
 
-A responsive live-auction application built with Next.js, TypeScript, Tailwind CSS, Supabase PostgreSQL/Auth/Realtime, and Netlify. Participants join with their name and email address, submit bids through an atomic database function, and receive accepted bids over a Supabase Realtime channel. A separate server-protected page manages an ordered queue of auction products and shows the donation total from every accepted bid per product.
+A responsive live-auction application built with Next.js, TypeScript, Tailwind CSS, Supabase PostgreSQL/Auth/Realtime, and Netlify. Participants join with their name and email address, submit bids through an atomic database function, and receive accepted bids over a Supabase Realtime channel. A separate server-protected page manages an ordered queue of auction products and shows the donation total from the winning bids per product.
 
 ## What is included
 
@@ -78,15 +78,17 @@ Never prefix the service-role key or administrator secret with `NEXT_PUBLIC_`. D
 3. Enter the product name, description, optional PNG/JPEG image (up to 4 MB), starting price, minimum increment, optional maximum increase, number of winning bidders, and three-letter currency code, then add the product to the queue. The maximum increase limits how far one bid may jump above the current highest bid; leave it blank for no limit. Repeat this for every product. The server creates a public `product-images` Supabase Storage bucket on the first upload; browser clients never receive the server key or direct upload permission. Winner places are assigned to the highest bids from distinct participants, so one participant cannot occupy multiple winner places.
 4. For bulk entry, choose **Download Excel template**, fill the `Events` sheet, and upload it with **Import Excel**. The columns cover the same event rules as the manual form plus an optional public HTTPS image URL. Blank rule cells use the form defaults. Rows are appended to the queue in spreadsheet order and always start as `upcoming`. The file is fully validated first, so one invalid row prevents the entire import instead of creating a partial queue.
 5. Reorder or duplicate upcoming products as needed. Deletion is allowed only while a product is upcoming and has no registrations or bids.
-6. Select a queued product and choose **Start this product** when bidding should open. Starting it atomically ends any previous active lot and shows everyone a synchronized 15-second countdown; bids are accepted only after it reaches zero. Choose **End bidding** to close it. Both actions require confirmation. While bidding is live, every event setting is read-only. Pricing, currency, winner count, and timer rules remain immutable after the event ends; descriptive content can then be corrected again.
+6. Select a queued product and choose **Start this event** when bidding should open. Starting it atomically ends any previous active lot and shows everyone a synchronized 15-second countdown; bids are accepted only after it reaches zero. Choose **End bidding** to close it. Both actions require confirmation. While bidding is live, every event setting is read-only. Pricing, currency, winner count, and timer rules remain immutable after the event ends; descriptive content can then be corrected again.
 7. For ended products, review the finalized winners and download the CSV report from **Export winners**.
 
-The admin product cards and bid history show a donation total calculated in PostgreSQL. It is the sum of every accepted bid for that product, including repeated increases by the same participant. Participant emails are visible only in the protected admin bid history.
+The admin product cards and bid history show a donation total calculated in PostgreSQL. It sums the highest bid from each participant currently occupying a winning place. Ended events use their persisted winning amounts. Earlier increases by the same participant are not counted again. Participant emails are visible only in the protected admin bid history.
 
 The first acceptable bid is `starting price + minimum increment`. Every later bid from a participant who is not leading must be at least `current highest bid + minimum increment`; the current leader may raise their own bid by one cent or more. If a maximum increase is configured, no bid may exceed `current highest bid + maximum increase` (or `starting price + maximum increase` for the first bid).
 The public start countdown and the following auction timer both use the product's server-recorded start time. Reaching `00:00` on the auction timer does not reject bids or end the product; bidding remains active until an administrator chooses **End bidding**.
 
 After an event ends, its final leaderboard remains publicly visible without requiring registration. The recent activity feed stays limited to 30 bids, while rank and winner status come from the complete database leaderboard.
+
+When a page comes back online, becomes visible again, or rejoins the event queue channel, it reloads the queue before refreshing the current event. Participant pages also retry failed recovery every 10 seconds while offline. The presentation screen refreshes every 15 seconds while connected. Concurrent recovery requests are combined into one request sequence.
 
 ## Test two participants
 

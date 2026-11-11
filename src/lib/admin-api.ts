@@ -15,7 +15,20 @@ export function isSameOriginRequest(request: Request) {
   if (!origin) return process.env.NODE_ENV !== "production";
 
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    const requestUrl = new URL(request.url);
+    const host = request.headers.get("host");
+    // Next's dev server can normalize 127.0.0.1 to localhost in request.url.
+    // Only use the browser's actual Host for local development requests.
+    if (
+      process.env.NODE_ENV !== "production" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(requestUrl.hostname) &&
+      host && /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host)
+    ) {
+      const localUrl = new URL(`${requestUrl.protocol}//${host}`);
+      if (localUrl.port !== requestUrl.port) return false;
+      return new URL(origin).origin === localUrl.origin;
+    }
+    return new URL(origin).origin === requestUrl.origin;
   } catch {
     return false;
   }

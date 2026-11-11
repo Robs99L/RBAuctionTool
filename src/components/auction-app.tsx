@@ -140,6 +140,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
     generation: number;
     promise: Promise<void>;
   } | null>(null);
+  const recoveryRequestRef = useRef<Promise<void> | null>(null);
   const { bids, leaderboard, participantCount } = liveState;
   const auctionId = auction?.id;
   const shouldObserveLiveAuction = presentation || Boolean(participant) || auction?.status === "ended";
@@ -188,11 +189,11 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   }, [client, commitAuctions]);
 
   const refreshDashboard = useCallback(async () => {
-    if (!client || !auctionId) return;
+    const requestedAuctionId = auctionRef.current?.id;
+    if (!client || !requestedAuctionId) return;
     const existingRequest = snapshotRequestRef.current;
-    if (existingRequest?.auctionId === auctionId) return existingRequest.promise;
+    if (existingRequest?.auctionId === requestedAuctionId) return existingRequest.promise;
 
-    const requestedAuctionId = auctionId;
     const generation = ++snapshotGenerationRef.current;
     liveEventBufferRef.current = [];
 
@@ -239,7 +240,23 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
 
     snapshotRequestRef.current = { auctionId: requestedAuctionId, generation, promise: request };
     return request;
-  }, [auctionId, client, commitLiveState]);
+  }, [client, commitLiveState]);
+
+  const recoverAuction = useCallback(() => {
+    if (recoveryRequestRef.current) return recoveryRequestRef.current;
+    const request = (async () => {
+      const previousAuctionId = auctionRef.current?.id;
+      await loadCurrentAuction();
+      // A different event gets its snapshot after its new live channel joins.
+      if (auctionRef.current?.id === previousAuctionId && shouldObserveLiveAuctionRef.current) {
+        await refreshDashboard();
+      }
+    })().finally(() => {
+      if (recoveryRequestRef.current === request) recoveryRequestRef.current = null;
+    });
+    recoveryRequestRef.current = request;
+    return request;
+  }, [loadCurrentAuction, refreshDashboard]);
 
   const handleLiveEvent = useCallback((event: LiveAuctionEvent) => {
     const currentAuction = auctionRef.current;
@@ -335,6 +352,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
 
   useEffect(() => {
     if (!client) return;
+    let active = true;
     const applyQueueChange = (payload: {
       eventType: "INSERT" | "UPDATE" | "DELETE";
       new: Record<string, unknown>;
@@ -362,18 +380,27 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
         (payload) => applyQueueChange(payload as Parameters<typeof applyQueueChange>[0]),
       )
       .subscribe((status) => {
-        if (!shouldObserveLiveAuctionRef.current) {
-          if (status === "SUBSCRIBED") setConnection("live");
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-            setConnection("offline");
-          }
+        if (!active) return;
+        if (status === "SUBSCRIBED") {
+          if (!shouldObserveLiveAuctionRef.current) setConnection("live");
+          void recoverAuction()
+            .then(() => { if (active) setError(""); })
+            .catch((queueError: unknown) => {
+              if (!active) return;
+              setConnection("offline");
+              setError(queueError instanceof Error ? queueError.message : "Could not load the auction queue.");
+            });
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setConnection("offline");
         }
       });
 
     return () => {
+      active = false;
       void client.removeChannel(channel);
     };
-  }, [client, commitAuctions]);
+  }, [client, commitAuctions, recoverAuction]);
 
   useEffect(() => {
     if (!client || !auctionId || presentation) return;
@@ -517,54 +544,43 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
         }
       });
 
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") recoverSnapshot();
-    };
-    window.addEventListener("online", recoverSnapshot);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-
     return () => {
       active = false;
       snapshotGenerationRef.current += 1;
       snapshotRequestRef.current = null;
       liveEventBufferRef.current = [];
       window.clearTimeout(fallbackRefresh);
-      window.removeEventListener("online", recoverSnapshot);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
       void client.removeChannel(channel);
     };
   }, [auctionId, client, handleLiveEvent, refreshDashboard, shouldObserveLiveAuction]);
 
   useEffect(() => {
-    if (!shouldObserveLiveAuction || connection !== "offline") return;
-    const interval = window.setInterval(() => {
-      void refreshDashboard().catch(() => undefined);
-    }, 10_000);
-    return () => window.clearInterval(interval);
-  }, [connection, refreshDashboard, shouldObserveLiveAuction]);
-
-  useEffect(() => {
-    if (!presentation || !client) return;
+    if (!client) return;
     let active = true;
     const recover = () => {
-      void loadCurrentAuction()
-        .then(() => refreshDashboard())
+      void recoverAuction()
         .then(() => { if (active) setError(""); })
-        .catch(() => { if (active) setConnection("offline"); });
+        .catch((recoveryError: unknown) => {
+          if (!active) return;
+          setConnection("offline");
+          setError(recoveryError instanceof Error ? recoveryError.message : "Could not reconnect to the auction.");
+        });
     };
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") recover();
     };
-    const interval = window.setInterval(recover, 15_000);
+    const interval = connection === "offline"
+      ? window.setInterval(recover, 10_000)
+      : presentation ? window.setInterval(recover, 15_000) : null;
     window.addEventListener("online", recover);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (interval !== null) window.clearInterval(interval);
       window.removeEventListener("online", recover);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [client, loadCurrentAuction, presentation, refreshDashboard]);
+  }, [client, connection, presentation, recoverAuction]);
 
   if (demoMode) return <DemoAuctionApp presentation={presentation} />;
   if (!configured) return <ConfigurationScreen />;

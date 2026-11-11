@@ -1,0 +1,28 @@
+[
+  {
+    "name": "Registered participant recovers event and snapshot; can bid in next event",
+    "status": "passed",
+    "details": {
+      "nextEventRecovered": true,
+      "participantContinued": true,
+      "bidAccepted": true,
+      "visibilityRecovery": true
+    }
+  },
+  {
+    "name": "Unregistered participant recovers missed switch before registration",
+    "status": "passed"
+  },
+  {
+    "name": "Queue channel automatically reloads events after resubscription",
+    "status": "passed"
+  },
+  {
+    "name": "Offline polling retries a failed queue load and recovers event",
+    "status": "passed"
+  },
+  {
+    "name": "Presentation also recovers the current event and leaderboard",
+    "status": "passed"
+  }
+]

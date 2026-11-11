@@ -27,8 +27,14 @@ export async function POST(request: Request) {
     return noStoreJson({ error: "Administrator access is not configured." }, { status: 503 });
   }
 
-  const body = (await request.json().catch(() => null)) as { secret?: string } | null;
-  const succeeded = Boolean(body?.secret && secretIsValid(body.secret));
+  const body: unknown = await request.json().catch(() => null);
+  if (
+    !body || typeof body !== "object" || Array.isArray(body) ||
+    !("secret" in body) || typeof body.secret !== "string"
+  ) {
+    return noStoreJson({ error: "A text administrator secret is required." }, { status: 400 });
+  }
+  const succeeded = Boolean(body.secret && secretIsValid(body.secret));
 
   try {
     const { data, error } = await getSupabaseAdminClient().rpc("consume_admin_login_attempt", {
