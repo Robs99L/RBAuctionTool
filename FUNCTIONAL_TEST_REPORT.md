@@ -6,6 +6,8 @@ Stand: 11. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Ne
 
 Alle drei reproduzierten Fehler wurden am 11. November 2026 lokal korrigiert. Die README beschreibt die Spendensumme jetzt korrekt.
 
+Auf anschließenden Nutzerwunsch verwendet die Anmeldemaske wieder das frühere responsive Layout mit der Christmas-Auction-Grafik ohne festes 16:9-Format. Die Eventbilder in der Bieter-, Admin- und Präsentationsansicht behalten 16:9.
+
 - Die Eventqueue wird beim Wiederverbinden, beim erneuten Sichtbarwerden und nach erneuter Queue-Subscription geladen. Danach wird das aktuelle Event aktualisiert. Bei einem Eventwechsel bezieht die neue Live-Subscription ihren eigenen Snapshot; alte Event-IDs aus vorherigen Renderdurchläufen werden nicht für die Wiederherstellung verwendet. Gleichzeitige Wiederherstellungen werden zusammengefasst. Fehlgeschlagene Wiederherstellungen werden auch vor der Registrierung alle zehn Sekunden erneut versucht.
 - Der Originvergleich berücksichtigt im Entwicklungsbetrieb den tatsächlichen Loopback-Hostheader. Anfragen über `localhost` und `127.0.0.1` funktionieren; fremde Origins, abweichende Ports und Protokolle bleiben gesperrt. Die Produktionsprüfung bleibt an die Request-URL gebunden und übernimmt keine fremden oder weitergeleiteten Hosts.
 - Fehlerhafte JSON-Bodies und nichttextliche Secretwerte werden vor dem Secretvergleich und vor dem Supabase-Aufruf mit HTTP 400 zurückgewiesen. Falsche Stringpasswörter unterliegen weiterhin dem Datenbank-Ratelimiter.

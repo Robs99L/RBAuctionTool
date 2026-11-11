@@ -863,14 +863,13 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
 
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-center lg:min-h-[calc(100dvh-81px)] lg:grid-cols-[1.08fr_.92fr]">
-      <section className="event-image-frame min-w-0 max-w-full bg-ink">
+      <section className="h-36 min-w-0 max-w-full overflow-hidden bg-ink sm:h-56 lg:h-auto">
         <Image
-          src={auction.image_url ?? christmasAuctionImage}
-          alt={auction.image_url ? auction.title : "Christmas Auction"}
-          fill
+          src={christmasAuctionImage}
+          alt="Christmas Auction"
           sizes="(max-width: 1024px) 100vw, 54vw"
-          className="object-contain"
-          placeholder={auction.image_url ? "empty" : "blur"}
+          className="block h-full w-full object-cover opacity-90 lg:h-auto lg:object-contain"
+          placeholder="blur"
           preload
         />
       </section>
