@@ -6,6 +6,8 @@ import { performance } from "node:perf_hooks";
 
 const origin = process.env.QA_ORIGIN || "http://localhost:3001";
 const debugOrigin = process.env.QA_DEBUG_ORIGIN || "http://localhost:9228";
+const resultName = process.env.QA_RESULT_NAME || "realtime-burst-results";
+if (!/^[a-z0-9-]+$/.test(resultName)) throw new Error("QA result name must contain lowercase letters, numbers or hyphens");
 if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) throw new Error("QA requires a local server");
 const env = await readFile(new URL("../.env.local", import.meta.url), "utf8");
 const supabaseUrl = env.match(/^NEXT_PUBLIC_SUPABASE_URL=["']?([^\s"']+)/m)?.[1];
@@ -45,7 +47,7 @@ class CDP {
 
 const auction = {
   id: "00000000-0000-4000-8000-000000000001", title: "QA simultaneous bids", description: "Local simulated bids", image_url: null,
-  starting_price: 0, minimum_increment: 1, maximum_bid_difference: null, winner_count: 12, timer_duration_seconds: 120,
+  starting_price: 500, minimum_increment: 25, maximum_bid_difference: 100, winner_count: 12, timer_duration_seconds: 120,
   currency: "EUR", status: "active", starts_at: new Date(Date.now() - 30_000).toISOString(), ends_at: null, sort_order: 0,
   created_at: new Date().toISOString(),
 };
@@ -146,6 +148,7 @@ const browser = await CDP.connect((await (await fetch(`${debugOrigin}/json/versi
 const pages = [];
 const failures = [];
 const results = [];
+const submittedBids = [];
 async function createPage(name, path, person) {
   const { browserContextId } = await browser.call("Target.createBrowserContext");
   const { targetId } = await browser.call("Target.createTarget", { url: "about:blank", browserContextId });
@@ -169,6 +172,21 @@ async function createPage(name, path, person) {
         body = adminSnapshot(); delay = adminDelay;
       } else if (url.pathname === "/rest/v1/auctions") body = [{ ...auction }];
       else if (url.pathname.endsWith("/get_auction_dashboard")) { body = dashboard(); delay = dashboardDelay; }
+      else if (url.pathname.endsWith("/place_bid")) {
+        assert(person, "Only registered bidder contexts may submit");
+        const input = JSON.parse(request.postData);
+        assert.equal(input.p_auction_id, auction.id);
+        const amount = Number(input.p_amount);
+        assert(Number.isFinite(amount) && amount > 0 && amount <= 9999999999.99);
+        assert(Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-8);
+        assert.equal(auction.status, "active");
+        const record = { id: crypto.randomUUID(), auction_id: auction.id, participant_id: person.id,
+          amount, created_at: new Date(Math.max(Date.now(), ...bids.map(bid => new Date(bid.created_at).getTime())) + 1).toISOString(),
+          username: person.username, email: person.email };
+        bids.push(record); submittedBids.push(record);
+        body = [{ bid_id: record.id, amount, created_at: record.created_at, username: record.username }];
+        await emit([{ table: "bids", type: "INSERT", record }]);
+      }
       else if (url.pathname.endsWith("/get_my_participant_with_contact")) body = person ? [{ ...person, auction_id: auction.id }] : [];
       else if (url.pathname.endsWith("/get_my_auction_identity_with_contact")) body = person ? [person] : [];
       else if (url.pathname === "/auth/v1/user") body = { id: person?.id, aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {} };
@@ -265,6 +283,32 @@ try {
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
   results.push({ scenario: "600 consecutive bids by one participant: older winning bidders remain ranked and the admin donation total includes winners absent from its 500 recent rows", passed: true });
 
+  // Exercise the real input form and RPC path. The database tests separately
+  // verify PostgreSQL acceptance; this fixture verifies all view updates.
+  adminDelay = 0;
+  const beforeLower = rows().map(row => ({ id: row.bid_id, amount: row.amount }));
+  async function submitFrom(contexts, amount) {
+    await Promise.all(contexts.map(({ page }) => page.evaluate(`(() => {
+      const input = document.querySelector('#bid-amount');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(String(amount))});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`)));
+    await Promise.all(contexts.map(({ page }) => page.evaluate("document.querySelector('#bid-amount').closest('form').requestSubmit()")));
+    await waitFor(async () => (await Promise.all(contexts.map(({ page }) => page.evaluate(`document.body.innerText.includes(${JSON.stringify(`Bid accepted at ${money(amount)}.`)})`)))).every(Boolean), "bid receipts");
+  }
+  await submitFrom(pages.slice(2), 50);
+  await submitFrom([pages[2]], 0.01);
+  assert.deepEqual(submittedBids.map(record => record.amount), [50, 50, 0.01]);
+  assert.deepEqual(rows().map(row => ({ id: row.bid_id, amount: row.amount })), beforeLower);
+  await waitFor(async () => await admin.evaluate("document.querySelector('aside ol').innerText.includes('€0.01')"), "lower bid in admin history");
+  assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
+  results.push({ scenario: "Both real bidder forms accept identical €50 bids below the €500 opening price and leader; a €0.01 follow-up is also saved while personal bests and all rankings remain unchanged", passed: true });
+  await submitFrom([pages[2]], 8000);
+  await waitFor(async () => (await all(`document.body.innerText.includes(${JSON.stringify(money(8000))})`)).every(Boolean), "bid above old maximum visible in all views");
+  assert.equal(submittedBids.at(-1).amount, 8000);
+  assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
+  results.push({ scenario: "A real bidder form accepts €8,000 above the old maximum increase; all four views update to the new leader", passed: true });
+
   auction.winner_count = 15;
   await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
   await waitFor(async () => await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length===15"), "winner count update");
@@ -291,7 +335,7 @@ try {
   failures.push({ error: error.stack ?? error.message });
   throw error;
 } finally {
-  await writeFile(new URL("../qa/realtime-burst-results.json", import.meta.url), JSON.stringify({
+  await writeFile(new URL(`../qa/${resultName}.json`, import.meta.url), JSON.stringify({
     date: new Date().toISOString(), mode: "Isolated local production browser, HTTP/Realtime fixtures; no Supabase writes or real service load test", results, failures,
   }, null, 2) + "\n");
   for (const { page, browserContextId } of pages) {

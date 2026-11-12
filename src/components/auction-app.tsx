@@ -23,7 +23,7 @@ import { getAuctionNow } from "@/lib/auction-clock";
 import { useAuctionClock } from "@/lib/use-auction-clock";
 import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
-import { maximumNextBid, minimumNextBid, parseBidAmount } from "@/lib/bid-rules";
+import { parseBidAmount } from "@/lib/bid-rules";
 import { browserDemoMode } from "@/lib/deployment-mode";
 import { formatMoney, formatTime } from "@/lib/format";
 import { normalizeParticipantProfile } from "@/lib/participant-profile";
@@ -797,26 +797,8 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
     if (remainingAuctionStartSeconds(demoAuction.starts_at) > 0) {
       throw new Error("Bidding opens when the start countdown reaches zero.");
     }
-    const minimum = minimumNextBid(
-      demoAuction.starting_price,
-      demoAuction.minimum_increment,
-      demoLeaderboard[0]?.amount,
-      demoLeaderboard[0]?.participant_id === participant.id,
-    );
-    const maximum = maximumNextBid(
-      demoAuction.starting_price,
-      demoAuction.maximum_bid_difference,
-      demoLeaderboard[0]?.amount,
-    );
-    if (amount < minimum) {
-      throw new Error(
-        `Your bid must be at least ${formatMoney(minimum, demoAuction.currency)}.`,
-      );
-    }
-    if (maximum !== null && amount > maximum) {
-      throw new Error(
-        `Your bid must not exceed ${formatMoney(maximum, demoAuction.currency)}.`,
-      );
+    if (parseBidAmount(String(amount)) === null) {
+      throw new Error("Enter a valid positive amount with no more than two decimal places.");
     }
 
     const nextBid: Bid = {
@@ -834,7 +816,7 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
       created_at: nextBid.created_at,
       username: nextBid.username,
     } satisfies BidReceipt;
-  }, [commitState, demoAuction, demoLeaderboard, demoState, participant]);
+  }, [commitState, demoAuction, demoState, participant]);
 
   const resetDemo = useCallback(() => {
     const next = createDemoAuctionState();
@@ -1039,18 +1021,6 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
   const biddingOpen = countdownOpen && connection === "live";
   const starting = status === "active" && !countdownOpen;
   const highest = leaderboard[0];
-  const isLeadingParticipant = highest?.participant_id === participant?.id;
-  const minimum = minimumNextBid(
-    auction.starting_price,
-    auction.minimum_increment,
-    highest?.amount,
-    isLeadingParticipant,
-  );
-  const maximum = maximumNextBid(
-    auction.starting_price,
-    auction.maximum_bid_difference,
-    highest?.amount,
-  );
   const personalRank = leaderboard.find((entry) => entry.participant_id === participant?.id);
   const showResultModal = Boolean(
     participant &&
@@ -1089,15 +1059,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
     }
     const parsed = parseBidAmount(amount);
     if (parsed === null) {
-      setFeedback({ kind: "error", text: "Enter a valid amount with no more than two decimal places." });
-      return;
-    }
-    if (parsed < minimum) {
-      setFeedback({ kind: "error", text: `Your bid must be at least ${formatMoney(minimum, auction.currency)}.` });
-      return;
-    }
-    if (maximum !== null && parsed > maximum) {
-      setFeedback({ kind: "error", text: `Your bid must not exceed ${formatMoney(maximum, auction.currency)}.` });
+      setFeedback({ kind: "error", text: "Enter a valid positive amount with no more than two decimal places." });
       return;
     }
 
@@ -1132,7 +1094,7 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
       )}
       {connection === "offline" && (
         <div className="notice notice-info mb-5" role="status">
-          Live updates are reconnecting. Accepted bids are still checked against the latest database value.
+          Live updates are reconnecting. Bid entry resumes once the auction is synchronized.
         </div>
       )}
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,.85fr)]">
@@ -1169,8 +1131,6 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                 </div>
                 <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-ink/10 pt-5 text-sm sm:flex sm:flex-wrap sm:gap-8">
                   <div><span className="block text-ink/45">Opening</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
-                  <div><span className="block text-ink/45">Bid step</span><strong className="mt-1 block">+{formatMoney(auction.minimum_increment, auction.currency)}</strong></div>
-                  <div><span className="block text-ink/45">Max. increase</span><strong className="mt-1 block">{auction.maximum_bid_difference == null ? "Unlimited" : `+${formatMoney(auction.maximum_bid_difference, auction.currency)}`}</strong></div>
                   <div><span className="block text-ink/45">Winner spots</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
                 </div>
               </div>
@@ -1278,12 +1238,6 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                   <span className="block text-xs font-bold uppercase tracking-[.13em] text-ink/45">Bidding as</span>
                   <strong className="mt-1 block">{participant.username}</strong>
                 </div>
-                <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                  <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Min. {formatMoney(minimum, auction.currency)}</span>
-                  {maximum !== null && (
-                    <span className="rounded-full bg-cream px-3 py-1.5 text-xs font-semibold text-ink/60">Max. {formatMoney(maximum, auction.currency)}</span>
-                  )}
-                </div>
               </div>
               <label className="field-label" htmlFor="bid-amount">Your bid</label>
               <div className="relative">
@@ -1295,16 +1249,15 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   inputMode="decimal"
-                  placeholder={minimum.toFixed(2)}
+                  placeholder="Enter your amount"
                   disabled={!biddingOpen || submitting}
-                  aria-describedby={isLeadingParticipant ? undefined : "bid-help"}
+                  aria-describedby="bid-help"
                 />
               </div>
-              {!isLeadingParticipant && (
-                <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
-                  The database rechecks the minimum and maximum when submitted.
-                </p>
-              )}
+              <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
+                Any positive amount is accepted, even below the opening price or current highest bid.
+                Every accepted bid is saved. Your highest bid counts for the leaderboard.
+              </p>
               <button className="btn-primary mt-5 w-full" disabled={!biddingOpen || submitting}>
                 {submitting
                   ? "Checking bid…"

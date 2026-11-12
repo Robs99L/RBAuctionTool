@@ -12,6 +12,26 @@ const auction: Auction = {
 const baseline = () => ({ ...emptyAdminLiveState(), auctions: [auction], auction, loadedAuctionId: auction.id });
 
 describe("administration live consistency", () => {
+  it("keeps lower and equal bids in history without reducing public ranks or donations", () => {
+    const record = (id: string, participant_id: string, amount: number, second: number) => ({
+      id, auction_id: auction.id, participant_id, amount,
+      created_at: `2026-11-12T12:00:0${second}Z`,
+    });
+    const events = [
+      record("best", "p1", 700, 1), record("second", "p2", 600, 2),
+      record("lower", "p1", 10, 3), record("tie", "p3", 600, 4),
+      record("lowest", "p4", 0.01, 5),
+    ].map(record => ({ kind: "bid" as const, record }));
+    const state = { ...baseline(), auction: { ...auction, winner_count: 2 }, auctions: [{ ...auction, winner_count: 2 }] };
+    const admin = applyAdminLiveEvents(state, events);
+    const publicState = applyLiveAuctionEvents(emptyAuctionLiveState(), events, state.auction);
+    expect(admin.bids.map(bid => bid.id)).toEqual(["lowest", "tie", "lower", "second", "best"]);
+    expect(admin.standings.leaderboard).toEqual(publicState.leaderboard);
+    expect(publicState.leaderboard.map(entry => entry.bid_id)).toEqual(["best", "second", "tie", "lowest"]);
+    expect(publicState.leaderboard.filter(entry => entry.is_winner).map(entry => entry.bid_id)).toEqual(["best", "second"]);
+    expect(admin.donationTotals[0].total_bid_amount).toBe(1300);
+  });
+
   it("keeps 500 recent bids and the same complete standings as public views in a duplicated burst", () => {
     const events = Array.from({ length: 2_000 }, (_, i): AdminLiveEvent => ({ kind: "bid", record: {
       id: `b${i}`, auction_id: "a1", participant_id: `p${i % 100}`, amount: 10 + i,

@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-12T08:28:13.970Z",
+  "mode": "Isolated local production browser, HTTP/Realtime fixtures; no Supabase writes or real service load test",
+  "results": [
+    {
+      "scenario": "Four independent browser contexts load the same active auction and become live",
+      "passed": true
+    },
+    {
+      "scenario": "1,000 bids / 2,000 shuffled duplicated notifications per view appear before two-second stale snapshots finish",
+      "passed": true,
+      "timing": [
+        {
+          "view": "presentation",
+          "deliveryMs": 108.80000001192093,
+          "visibleMs": 145.80000001192093
+        },
+        {
+          "view": "admin",
+          "deliveryMs": 103.69999998807907,
+          "visibleMs": 227.80000001192093
+        },
+        {
+          "view": "bidder1",
+          "deliveryMs": 60,
+          "visibleMs": 143.09999999403954
+        },
+        {
+          "view": "bidder2",
+          "deliveryMs": 63.900000005960464,
+          "visibleMs": 153.5
+        }
+      ]
+    },
+    {
+      "scenario": "After stale responses: presentation Top 12, full 300-person bidder ranking and latest 500 admin history rows agree",
+      "passed": true
+    },
+    {
+      "scenario": "Another 1,000 bids in a sustained stream: all views converge, no overlapping protected reads, same 12 winners",
+      "passed": true,
+      "protectedReads": 2,
+      "peakConcurrentReads": 1
+    },
+    {
+      "scenario": "600 consecutive bids by one participant: older winning bidders remain ranked and the admin donation total includes winners absent from its 500 recent rows",
+      "passed": true
+    },
+    {
+      "scenario": "Both real bidder forms accept identical €50 bids below the €500 opening price and leader; a €0.01 follow-up is also saved while personal bests and all rankings remain unchanged",
+      "passed": true
+    },
+    {
+      "scenario": "A real bidder form accepts €8,000 above the old maximum increase; all four views update to the new leader",
+      "passed": true
+    },
+    {
+      "scenario": "Realtime winner-count update expands presentation to Top 15",
+      "passed": true
+    },
+    {
+      "scenario": "Event end immediately disables both bidder forms and survives older active snapshots in all views",
+      "passed": true
+    },
+    {
+      "scenario": "An unsaved new-event form remains selected during unrelated live traffic",
+      "passed": true
+    }
+  ],
+  "failures": []
+}

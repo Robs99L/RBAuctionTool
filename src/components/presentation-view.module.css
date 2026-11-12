@@ -143,10 +143,6 @@
 .winnerBadge { display: inline-block; flex-shrink: 0; border-radius: 4px; background: #deebd7; padding: 2px 7px; color: #2a5a3b; font-size: clamp(12px, .8vw, 15px); font-weight: 700; line-height: 1.2; }
 .winningRow, .winningRow:nth-child(even) { background: #edf3e7; }
 .winningRow .rank { background: #d9e8d1; color: #285b3b; }
-.leadingRow, .leadingRow:nth-child(even) { border-bottom-color: #e2d6b9; background: #f5edda; }
-.leadingRow .rank { background: #ead6a7; color: #725222; }
-.leadingRow .winnerBadge { background: #ebdbb5; color: #725222; }
-.leadingRow .bidAmount { color: #725222; }
 .bidAmount { font-size: clamp(18px, 1.35vw, 26px); font-variant-numeric: tabular-nums; line-height: 1.2; text-align: right; white-space: nowrap; }
 .rankFooter { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 18px; color: var(--presentation-muted); font-size: clamp(14px, 1vw, 18px); }
 .emptyLeaderboard { display: flex; min-height: 240px; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 32px 16px; text-align: center; }

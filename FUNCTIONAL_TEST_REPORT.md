@@ -2,9 +2,28 @@
 
 Stand: 12. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
+## Beliebige positive Gebote
+
+Gebote müssen weder den Startpreis noch das bisherige Höchstgebot übertreffen. Jeder positive Betrag mit maximal zwei Nachkommastellen innerhalb von `numeric(12, 2)` wird als eigener Datensatz gespeichert, auch gleiche Beträge und niedrigere Folgegebote. Rangliste, Gewinner und Spendensumme verwenden weiterhin das höchste Gebot je Person; ein kleineres Folgegebot reduziert keine bestehende Verpflichtung. Die neue Migration ersetzt ausschließlich die Betragsregeln in `place_bid`. Anmeldung, vollständige Registrierung, Eventgrenzen, Transaktionssperre und der Abstand von 300 Millisekunden zwischen Geboten derselben Person bleiben bestehen. Bieteransicht und Demo prüfen dieselbe Betragsgültigkeit. Überholte Mindest-/Maximalanzeigen wurden entfernt; vorhandene Adminwerte bleiben für bestehende Events erhalten, die zugehörigen Eingabefelder sind ausgeblendet. Alte Excelvorlagen bleiben lesbar und erhalten aktualisierte Hinweise.
+
+| Prüfung für die neue Gebotsregel | Ergebnis |
+| --- | --- |
+| Gesamte automatisierte Testsuite | 121 Tests in 20 Dateien bestanden |
+| PostgreSQL-Prüfung mit PGlite und sämtlichen Migrationen | Niedrige erste Gebote, gleiche Gebote verschiedener Personen, niedrige nicht gewinnende Folgegebote und Beträge über der alten Maximalerhöhung separat gespeichert |
+| Rangliste, Spendensumme und persistierte Gewinner in PostgreSQL | Bisherige persönliche Höchstgebote bleiben erhalten; nur Gewinnerbeträge zählen zur Spendensumme |
+| Ungültige Beträge, Berechtigungen, Anmeldung, Kontaktregistrierung, Mehrfachgebote, Startsperre und Eventende | Ablehnung weiterhin korrekt |
+| Vier isolierte Browserkontexte mit Produktionsbuild | Zwei echte Eingabeformulare akzeptieren jeweils 50 € unter dem Startpreis von 500 € und dem führenden Gebot; 0,01 € ebenfalls angenommen; Verlauf aktualisiert, bisherige Ränge erhalten |
+| Gebot von 8.000 € über der alten Maximalerhöhung | Neue Führung in Bieter-, Admin- und Präsentationsansicht sichtbar |
+| Gebotsschübe, verspätete Snapshots, Gewinnerzahl und Eventende | Alle zehn Browserszenarien bestanden, keine unbehandelten Laufzeitfehler |
+| TypeScript, ESLint und isolierter Produktionsbuild | Bestanden |
+
+Browsernachweis: [Neue Gebotsregel und Live-Abgleich](qa/any-bid-browser-results.json). Die PostgreSQL-Prüfung verwendet eine isolierte lokale Datenbank; nur der Supabase-Auth-Kontext ist nachgebildet, die in PGlite nicht verfügbare pgcrypto-Extensiondeklaration wird ausgelassen. Der Browserprüflauf ersetzt Supabase-HTTP und Realtime durch gemeinsame lokale Testantworten. Es wurden keine produktiven Gebote erzeugt und keine echte Free-Tier-Last gemessen. Das Lasttestskript wurde an die Annahme aller parallelen Gebote angepasst, aber nicht gegen ein gehostetes Projekt ausgeführt.
+
+**Aktivierung im vorhandenen Supabase-Projekt noch offen:** `20261112081938_allow_any_positive_bid.sql` ist vorbereitet und lokal geprüft. Die CLI hat keinen Access Token; der vom Nutzer genannte Projektlink ersetzt keinen SQL-Verwaltungszugang. Die Migration wurde deshalb noch nicht im Projekt ausgeführt. Sie muss vor dem Deployment des aktualisierten Clients angewendet werden. Die folgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Farbgestaltung der Präsentation
 
-Die Präsentation verwendet einen dunkelblauen Hintergrund, einen tannengrünen Leaderboardkopf, warme elfenbeinfarbene Karten und goldene Akzente. Platz 1 ist dezent goldfarben hervorgehoben, weitere Gewinnerplätze hellgrün. Schnee, Lichterkette, Weihnachtsmütze und Geschenke bleiben erhalten. Verbindungs- und Eventstatus haben abgestimmte Farben. Die Änderung betrifft Darstellung und Platzbedarf; Liveverarbeitung und Gebotsregeln wurden nicht geändert.
+Die Präsentation verwendet einen dunkelblauen Hintergrund, einen tannengrünen Leaderboardkopf, warme elfenbeinfarbene Karten und goldene Akzente. Die damalige goldene Hervorhebung von Platz 1 wurde auf anschließenden Nutzerwunsch entfernt; alle Gewinnerzeilen erscheinen jetzt hellgrün. Die folgenden Farb-Screenshots zeigen den ursprünglichen Farbentwurf vor dieser kleinen Anpassung. Schnee, Lichterkette, Weihnachtsmütze und Geschenke bleiben erhalten. Verbindungs- und Eventstatus haben abgestimmte Farben. Die Farbänderung betrifft Darstellung und Platzbedarf; Liveverarbeitung und Gebotsregeln wurden dabei nicht geändert.
 
 | Prüfung am 12. November | Ergebnis |
 | --- | --- |

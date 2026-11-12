@@ -7,7 +7,7 @@ Use a separate Supabase staging project for rehearsal. Never run the automated l
 1. Use Supabase Pro and Netlify Pro. In Supabase Pro, disable the spend cap or request adequate Realtime limits; the spend-capped Pro limit is too low for repeated fan-out to 300 clients.
 2. Under **Authentication → Rate Limits**, set **Anonymous sign-ins** to at least `600` per hour. The bucket is per public IP, so this is required when all guests share the venue network.
 3. Enable anonymous sign-ins. Consider CAPTCHA or an upstream venue-only access rule to offset the higher sign-in allowance.
-4. Apply every migration, including `20261022075657_optimize_live_auction_scale.sql` and `20261022183551_extend_auction_start_countdown.sql`.
+4. Apply every migration, including `20261022075657_optimize_live_auction_scale.sql`, `20261022183551_extend_auction_start_countdown.sql` and `20261112081938_allow_any_positive_bid.sql`.
 5. Confirm `auctions`, `bids`, and `participants` are in **Database → Pipelines → Realtime**.
 6. Run Supabase Security, Performance, and Health Advisors and resolve every error-level finding.
 7. Configure Production environment variables in Netlify and redeploy after changing them.
@@ -26,13 +26,13 @@ $env:LOAD_TEST_BID_ROUNDS = "3"
 npm run loadtest:auction
 ```
 
-The test creates one disposable lot and anonymous users, establishes all Realtime connections, submits concurrent competing bids, checks that exactly one bid per round wins the database race, measures p50/p95/p99 latency, verifies at least 99% Realtime delivery, and removes the created auction and Auth users. The append-only auction audit records intentionally remain.
+The test creates one disposable lot and anonymous users, establishes all Realtime connections, submits concurrent identical bids and lower follow-up bids, checks that every participant's bid is accepted each round, measures p50/p95/p99 latency, verifies at least 99% Realtime delivery, and removes the created auction and Auth users. The append-only auction audit records intentionally remain. With 300 participants and three rounds, 900 accepted bids produce about 270,000 bid notifications; use this only on staging with sufficient Realtime allowance.
 
 Acceptance criteria:
 
 - 300/300 registrations and Realtime subscriptions succeed from one source IP.
 - No Auth `429`, Data API `5xx`, Realtime disconnect, or database timeout occurs.
-- Exactly one identical competing bid is accepted per round.
+- Every participant's identical or lower bid is accepted per round and stored separately. Rankings still use each participant's highest bid.
 - Bid RPC p95 is below 1 second and p99 below 2 seconds.
 - Realtime delivery is at least 99%; every reconnect converges through a fresh dashboard snapshot.
 - Database CPU remains below 70% and database connections below 70% of the plan limit.

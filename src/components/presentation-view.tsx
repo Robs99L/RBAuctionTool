@@ -238,7 +238,7 @@ function PresentationLeaderboard({ auction, leaderboard }: { auction: Auction; l
           aria-label={`Top ${limit} highest bids per participant`}
         >
           {entries.map((entry) => (
-            <li key={entry.participant_id} className={`${styles.rankRow} ${entry.is_winner ? styles.winningRow : ""} ${entry.bidder_rank === 1 ? styles.leadingRow : ""}`}>
+            <li key={entry.participant_id} className={`${styles.rankRow} ${entry.is_winner ? styles.winningRow : ""}`}>
               <span className={styles.rank}>#{entry.bidder_rank}</span>
               <div className={styles.bidder}>
                 <strong>{entry.username}</strong>

@@ -723,7 +723,7 @@ function DemoAuctionEditor() {
     ) {
       setMessage({
         kind: "error",
-        text: "Enter valid pricing details and a timer duration between 0.5 and 1,440 minutes. The optional maximum increase must be at least the minimum step.",
+        text: "Enter valid event details and a timer duration between 0.5 and 1,440 minutes.",
       });
       return;
     }
@@ -1128,30 +1128,12 @@ function AuctionManagerView({
                 </div>
               )}
             </div>
+            <input type="hidden" name="minimumIncrement" value={form.minimumIncrement} />
+            <input type="hidden" name="maximumDifference" value={form.maximumDifference} />
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="field-label" htmlFor="starting-price">Starting price</label>
                 <input id="starting-price" name="startingPrice" type="number" min="0" step="0.01" className="field" value={form.startingPrice} onChange={(event) => updateField("startingPrice", event.target.value)} readOnly={rulesLocked} aria-disabled={rulesLocked} required />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="increment">Minimum step</label>
-                <input id="increment" name="minimumIncrement" type="number" min="0.01" step="0.01" className="field" value={form.minimumIncrement} onChange={(event) => updateField("minimumIncrement", event.target.value)} readOnly={rulesLocked} aria-disabled={rulesLocked} required />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="maximum-difference">Maximum increase</label>
-                <input
-                  id="maximum-difference"
-                  name="maximumDifference"
-                  type="number"
-                  min={form.minimumIncrement || "0.01"}
-                  step="0.01"
-                  className="field"
-                  value={form.maximumDifference}
-                  onChange={(event) => updateField("maximumDifference", event.target.value)}
-                  readOnly={rulesLocked}
-                  aria-disabled={rulesLocked}
-                  placeholder="Unlimited"
-                />
               </div>
               <div>
                 <label className="field-label" htmlFor="winner-count">Winning bidders</label>
@@ -1180,7 +1162,8 @@ function AuctionManagerView({
               </div>
             </div>
             <p className="text-xs leading-5 text-ink/45">
-              Maximum increase is the largest allowed difference from the current highest bid. Leave it blank for no limit. The timer starts when this event goes live and never ends bidding automatically.
+              The starting price is a reference. Any positive bid is accepted, including lower amounts.
+              The leaderboard uses each participant&apos;s highest bid. The timer never ends bidding automatically.
             </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}
             <div className="grid gap-3 border-t border-ink/10 pt-6 sm:flex sm:flex-wrap sm:items-center">

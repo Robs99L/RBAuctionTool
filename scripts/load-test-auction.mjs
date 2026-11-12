@@ -134,7 +134,7 @@ try {
     .insert({
       title: `[LOAD TEST] ${runId}`,
       description: "Disposable automated concurrency test.",
-      starting_price: 0,
+      starting_price: 500,
       minimum_increment: 1,
       maximum_bid_difference: null,
       winner_count: 1,
@@ -165,15 +165,9 @@ try {
   const bidLatencies = [];
   let acceptedBids = 0;
   for (let round = 1; round <= bidRounds; round += 1) {
-    const { data: highestRows, error: highestError } = await service
-      .from("bids")
-      .select("amount")
-      .eq("auction_id", auctionId)
-      .order("amount", { ascending: false })
-      .limit(1);
-    if (highestError) throw highestError;
-    const amount = Number(highestRows?.[0]?.amount ?? createdAuction.starting_price)
-      + Number(createdAuction.minimum_increment);
+    // Everyone may submit identical amounts; alternating rounds also exercise
+    // bids below both the opening price and the already accepted highest bid.
+    const amount = round % 2 === 0 ? 0.01 : 1;
 
     const results = await Promise.all(participants.map(async ({ client }) => {
       const startedAt = performance.now();
@@ -182,8 +176,8 @@ try {
       return result;
     }));
     const acceptedThisRound = results.filter(({ error }) => !error).length;
-    if (acceptedThisRound !== 1) {
-      throw new Error(`Expected exactly one accepted bid in round ${round}, received ${acceptedThisRound}.`);
+    if (acceptedThisRound !== userCount) {
+      throw new Error(`Expected ${userCount} accepted bids in round ${round}, received ${acceptedThisRound}.`);
     }
     acceptedBids += acceptedThisRound;
     await wait(roundIntervalMs);
