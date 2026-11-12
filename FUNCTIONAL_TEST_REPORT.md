@@ -1,6 +1,21 @@
 # Funktionstest und Fehlerkorrekturen des Auktionstools
 
-Stand: 11. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
+Stand: 12. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
+
+## Farbgestaltung der Präsentation
+
+Die Präsentation verwendet einen dunkelblauen Hintergrund, einen tannengrünen Leaderboardkopf, warme elfenbeinfarbene Karten und goldene Akzente. Platz 1 ist dezent goldfarben hervorgehoben, weitere Gewinnerplätze hellgrün. Schnee, Lichterkette, Weihnachtsmütze und Geschenke bleiben erhalten. Verbindungs- und Eventstatus haben abgestimmte Farben. Die Änderung betrifft Darstellung und Platzbedarf; Liveverarbeitung und Gebotsregeln wurden nicht geändert.
+
+| Prüfung am 12. November | Ergebnis |
+| --- | --- |
+| Lokale Entwicklungsvorschau mit Beispielgeboten bei 1920 × 1080 | Zehn Plätze vollständig sichtbar; kein Scrollen der Seite oder Rangliste |
+| 16:9 bei 1280 × 720 mit zwölf Gewinnerplätzen | Alle zwölf Plätze vollständig sichtbar; kein Scrollen der Seite oder Rangliste |
+| Mobil bei 390 × 844 | Gestapelte Karten, kein horizontaler Überlauf |
+| 16:9-Eventbildrahmen als im Browser eingefügte DOM-Fixture | Seitenverhältnis 16:9; Eventkarte bei beiden Desktopgrößen ohne Scrollen |
+| Acht geprüfte Text-/Hintergrundfarbpaare | Alle mindestens 4,5:1 Kontrast |
+| TypeScript, ESLint und isolierter Produktionsbuild mit webpack | Bestanden |
+
+Nachweise: [Desktop](qa/presentation-colors-desktop.png), [16:9 mit zwölf Plätzen](qa/presentation-colors-slide.png), [Mobil](qa/presentation-colors-mobile.png) und [Messwerte](qa/presentation-colors-results.json). Die Bildrahmenprüfung erfolgte nach den Screenshots mit einer DOM-Fixture, ohne echten Upload. Die lokale Beispielvorschau stellt keine Supabase-Anfragen. Die nachfolgenden Funktions- und Lastprüfungen dokumentieren frühere Prüfstände und wurden für diese Gestaltung nicht erneut ausgeführt.
 
 ## Viele gleichzeitig eintreffende Gebote
 

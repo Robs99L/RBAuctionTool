@@ -92,7 +92,7 @@ export function PresentationView({
             <div className={styles.eventDetails}>
               <div className={styles.eventHeading}>
                 <p className={styles.eyebrow}>Current event</p>
-                <span className={`${styles.eventStatus} ${auction.status === "active" ? styles.active : ""}`}>
+                <span className={`${styles.eventStatus} ${auction.status === "active" ? styles.active : auction.status === "ended" ? styles.closed : ""}`}>
                   {auction.status === "active" ? "Live event" : auction.status === "ended" ? "Bidding closed" : "Starting soon"}
                 </span>
               </div>
@@ -163,7 +163,7 @@ function Snowfall() {
 function ChristmasLights() {
   const strandId = useId();
   const bulbs = [30, 90, 150, 210, 270, 330];
-  const colors = ["#f3c45d", "#e35462", "#67b58a"];
+  const colors = ["#edc973", "#cb5361", "#89bfa0"];
   return (
     <svg className={styles.christmasLights} aria-hidden="true" focusable="false">
       <defs>
@@ -238,7 +238,7 @@ function PresentationLeaderboard({ auction, leaderboard }: { auction: Auction; l
           aria-label={`Top ${limit} highest bids per participant`}
         >
           {entries.map((entry) => (
-            <li key={entry.participant_id} className={`${styles.rankRow} ${entry.is_winner ? styles.winningRow : ""}`}>
+            <li key={entry.participant_id} className={`${styles.rankRow} ${entry.is_winner ? styles.winningRow : ""} ${entry.bidder_rank === 1 ? styles.leadingRow : ""}`}>
               <span className={styles.rank}>#{entry.bidder_rank}</span>
               <div className={styles.bidder}>
                 <strong>{entry.username}</strong>

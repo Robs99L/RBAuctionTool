@@ -1,0 +1,174 @@
+{
+  "date": "2026-11-12",
+  "mode": "Local browser using standalone demo; no Supabase requests or writes",
+  "results": [
+    {
+      "name": "desktop",
+      "width": 1920,
+      "height": 1080,
+      "scrollWidth": 1920,
+      "scrollHeight": 1080,
+      "rows": 10,
+      "listScrollHeight": 586,
+      "listHeight": 586,
+      "first": {
+        "x": 923.859375,
+        "y": 324.84375,
+        "width": 905.546875,
+        "height": 58.609375
+      },
+      "last": {
+        "x": 923.859375,
+        "y": 852.375,
+        "width": 905.546875,
+        "height": 58.609375
+      },
+      "card": {
+        "x": 57.59375,
+        "y": 134,
+        "width": 794.875,
+        "height": 843
+      },
+      "headerHeight": 181.84375,
+      "colors": {
+        "background": "rgb(7, 23, 46)",
+        "heading": "linear-gradient(115deg, rgb(21, 61, 51), rgb(25, 75, 61))",
+        "card": "rgb(255, 253, 247)",
+        "firstText": "rgb(21, 53, 46)"
+      },
+      "snow": 144,
+      "imageFrameFixture": {
+        "ratio": 1.777808919875276,
+        "eventScrollHeight": 841,
+        "eventHeight": 841
+      }
+    },
+    {
+      "name": "slide",
+      "width": 1280,
+      "height": 720,
+      "scrollWidth": 1280,
+      "scrollHeight": 720,
+      "rows": 12,
+      "listScrollHeight": 342,
+      "listHeight": 342,
+      "first": {
+        "x": 617.9375,
+        "y": 257.625,
+        "width": 599.640625,
+        "height": 28.53125
+      },
+      "last": {
+        "x": 617.9375,
+        "y": 571.46875,
+        "width": 599.640625,
+        "height": 28.53125
+      },
+      "card": {
+        "x": 38.390625,
+        "y": 110,
+        "width": 529.921875,
+        "height": 544
+      },
+      "headerHeight": 138.625,
+      "colors": {
+        "background": "rgb(7, 23, 46)",
+        "heading": "linear-gradient(115deg, rgb(21, 61, 51), rgb(25, 75, 61))",
+        "card": "rgb(255, 253, 247)",
+        "firstText": "rgb(21, 53, 46)"
+      },
+      "snow": 144,
+      "imageFrameFixture": {
+        "ratio": 1.7777958299485512,
+        "eventScrollHeight": 542,
+        "eventHeight": 542
+      }
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 375,
+      "scrollHeight": 1990,
+      "rows": 10,
+      "listScrollHeight": 897,
+      "listHeight": 897,
+      "first": {
+        "x": 37,
+        "y": 878.9375,
+        "width": 301,
+        "height": 108.59375
+      },
+      "last": {
+        "x": 37,
+        "y": 1691.125,
+        "width": 301,
+        "height": 85
+      },
+      "card": {
+        "x": 20,
+        "y": 172,
+        "width": 335,
+        "height": 459.75
+      },
+      "headerHeight": 178.1875,
+      "colors": {
+        "background": "rgb(7, 23, 46)",
+        "heading": "linear-gradient(115deg, rgb(21, 61, 51), rgb(25, 75, 61))",
+        "card": "rgb(255, 253, 247)",
+        "firstText": "rgb(21, 53, 46)"
+      },
+      "snow": 144
+    }
+  ],
+  "contrast": [
+    {
+      "name": "body",
+      "foreground": "#15352e",
+      "background": "#fffdf7",
+      "ratio": 13.06
+    },
+    {
+      "name": "muted",
+      "foreground": "#5d6b65",
+      "background": "#fffdf7",
+      "ratio": 5.5
+    },
+    {
+      "name": "rank",
+      "foreground": "#5d6b65",
+      "background": "#e9ede4",
+      "ratio": 4.71
+    },
+    {
+      "name": "winner",
+      "foreground": "#2a5a3b",
+      "background": "#deebd7",
+      "ratio": 6.47
+    },
+    {
+      "name": "leader",
+      "foreground": "#725222",
+      "background": "#ead6a7",
+      "ratio": 4.98
+    },
+    {
+      "name": "gold amount",
+      "foreground": "#f1d491",
+      "background": "#194b3d",
+      "ratio": 6.89
+    },
+    {
+      "name": "offline",
+      "foreground": "#7d5918",
+      "background": "#faf0d9",
+      "ratio": 5.59
+    },
+    {
+      "name": "closed",
+      "foreground": "#913d32",
+      "background": "#f7e8e3",
+      "ratio": 6.03
+    }
+  ]
+}
