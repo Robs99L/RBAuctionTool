@@ -6,6 +6,7 @@ import { AuctionTimer } from "@/components/auction-timer";
 import { applyAdminLiveEvents, emptyAdminLiveState, replayAdminSnapshot, type AdminBid, type AdminLiveEvent, type AdminLiveState } from "@/lib/admin-live-state";
 import { emptyAuctionLiveState, normalizeAuctionDashboard, type LiveParticipantInsert } from "@/lib/auction-live-state";
 import { createLiveEventBatcher } from "@/lib/live-event-batcher";
+import { subscribeAuctionBatches, usesAuctionBroadcast } from "@/lib/auction-broadcast";
 import { createRefreshScheduler } from "@/lib/refresh-scheduler";
 import { applyAuctionQueueEvent, moveAuctionInQueue, orderAuctions, selectCurrentAuction } from "@/lib/auction-queue";
 import { AUCTION_START_COUNTDOWN_SECONDS } from "@/lib/auction-timer";
@@ -345,14 +346,32 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       15_000,
     );
     const client = getSupabaseBrowserClient();
-    const channel = client
+    const batched = usesAuctionBroadcast();
+    let queueConnected = false;
+    let batchesConnected = !batched;
+    const updateConnection = () => setLiveConnected(queueConnected && batchesConnected);
+    const stopBatches = batched ? subscribeAuctionBatches(client, {
+      onEvents: events => { events.forEach(accept); },
+      onStatus: status => {
+        batchesConnected = status === "SUBSCRIBED";
+        updateConnection();
+        if (batchesConnected) recover();
+      },
+      onError: error => {
+        batchesConnected = false;
+        updateConnection();
+        setMessage({ kind: "error", text: error.message });
+      },
+    }) : () => {};
+    let channel = client
       .channel("admin-auction-dashboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "auctions" }, payload => {
         accept({ kind: "queue", event: payload.eventType === "DELETE"
           ? { kind: "delete", id: String(payload.old.id) }
           : { kind: "upsert", auction: normalizedAuction(payload.new as Auction) } });
         recover();
-      })
+      });
+    if (!batched) channel = channel
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "bids", select: ["id", "auction_id", "participant_id", "amount", "created_at"] }, payload => {
         const row = payload.new;
         accept({ kind: "bid", record: {
@@ -364,11 +383,14 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
         accept({ kind: "participant", record: {
           id: String(payload.new.id), auction_id: String(payload.new.auction_id), username: String(payload.new.username),
         } });
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") { setLiveConnected(true); recover(); }
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") offline();
       });
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") { queueConnected = true; updateConnection(); recover(); }
+      else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+        queueConnected = false;
+        updateConnection();
+      }
+    });
     window.addEventListener("online", recover);
     window.addEventListener("offline", offline);
     document.addEventListener("visibilitychange", whenVisible);
@@ -377,6 +399,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       window.clearInterval(interval);
       scheduler.dispose();
       batcher.dispose();
+      stopBatches();
       if (liveBatcherRef.current === batcher) liveBatcherRef.current = null;
       if (liveRefreshRef.current === scheduler) liveRefreshRef.current = null;
       window.removeEventListener("online", recover);

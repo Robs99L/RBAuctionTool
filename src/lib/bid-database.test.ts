@@ -1,6 +1,6 @@
-import { readFile, readdir } from "node:fs/promises";
-import { PGlite } from "@electric-sql/pglite";
+import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createTestAuctionDatabase } from "./test-auction-database";
 
 const auctionId = "00000000-0000-4000-8000-000000000001";
 const userIds = [1, 2, 3, 4].map(i => `10000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
@@ -11,27 +11,7 @@ describe("bid acceptance in PostgreSQL", () => {
   let db: PGlite;
 
   beforeAll(async () => {
-    db = new PGlite();
-    // Only the external Supabase Auth context is stubbed. The real application
-    // tables, policies, triggers and functions come from every repo migration.
-    await db.exec(`
-      create role anon;
-      create role authenticated;
-      create role service_role bypassrls;
-      create schema auth;
-      create table auth.users (id uuid primary key);
-      create function auth.uid() returns uuid language sql stable as $$
-        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-      $$;
-      grant usage on schema auth to anon, authenticated, service_role;
-      create publication supabase_realtime;
-    `);
-    const directory = new URL("../../supabase/migrations/", import.meta.url);
-    for (const file of (await readdir(directory)).filter(file => file.endsWith(".sql")).sort()) {
-      const sql = await readFile(new URL(file, directory), "utf8");
-      // PGlite has gen_random_uuid built in, but does not package pgcrypto.
-      await db.exec(sql.replace("create extension if not exists pgcrypto;", ""));
-    }
+    db = await createTestAuctionDatabase();
   }, 30_000);
 
   beforeEach(async () => {

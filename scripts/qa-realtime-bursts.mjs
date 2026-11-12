@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks";
 const origin = process.env.QA_ORIGIN || "http://localhost:3001";
 const debugOrigin = process.env.QA_DEBUG_ORIGIN || "http://localhost:9228";
 const resultName = process.env.QA_RESULT_NAME || "realtime-burst-results";
+const batchedRealtime = process.env.QA_BATCHED_REALTIME === "true";
 if (!/^[a-z0-9-]+$/.test(resultName)) throw new Error("QA result name must contain lowercase letters, numbers or hyphens");
 if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) throw new Error("QA requires a local server");
 const env = await readFile(new URL("../.env.local", import.meta.url), "utf8");
@@ -90,8 +91,8 @@ function adminSnapshot() {
 // Uses the actual Supabase v2 wire protocol and binding IDs, with no network socket.
 function installFixtures(config) {
   localStorage.clear();
-  if (config.person) {
-    const user = { id: config.person.id, aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {} };
+  if (config.person || config.batchedRealtime) {
+    const user = { id: config.person?.id ?? "90000000-0000-4000-8000-000000000001", aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {} };
     const token = `${btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${btoa(JSON.stringify({ sub: user.id, exp: Math.floor(Date.now() / 1000) + 3600 }))}.dummy`;
     localStorage.setItem(config.storageKey, JSON.stringify({ access_token: token, refresh_token: "qa-refresh", token_type: "bearer", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user }));
   }
@@ -122,8 +123,40 @@ function installFixtures(config) {
   }
   window.WebSocket = FixtureSocket;
   window.__qaSockets = () => sockets.map(socket => ({ state: socket.readyState, channels: [...socket.channels.keys()] }));
+  window.__qaRawBidSubscriptions = () => sockets.filter(socket => socket.readyState === 1)
+    .flatMap(socket => [...socket.channels.values()]).flatMap(channel => channel.bindings)
+    .filter(binding => binding.table === 'bids' || binding.table === 'participants').length;
+  window.__qaBatchCount = 0;
+  const pending = new Map();
+  let timer = null;
+  function flush() {
+    timer = null;
+    const entries = [...pending.values()].slice(0, 1000);
+    for (const entry of entries) pending.delete(entry.kind + ':' + entry.record.id);
+    if (entries.length) {
+      const payload = { protocol: 1, batch_id: crypto.randomUUID(), events: entries };
+      for (const socket of sockets) for (const [topic, channel] of socket.channels) {
+        if (socket.readyState !== 1 || topic !== 'realtime:auction-live') continue;
+        window.__qaBatchCount++;
+        socket.message([channel.join, null, topic, 'broadcast', { event: 'auction_batch', payload }]);
+      }
+    }
+    if (pending.size) timer = setTimeout(flush, 1000);
+  }
   window.__qaEmit = events => {
     window.__qaStart = performance.now();
+    if (config.batchedRealtime) {
+      for (const event of events) {
+        if (event.table !== 'bids' && event.table !== 'participants') continue;
+        const source = event.record;
+        const kind = event.table === 'bids' ? 'bid' : 'participant';
+        const record = kind === 'bid'
+          ? { id: source.id, auction_id: source.auction_id, participant_id: source.participant_id, amount: source.amount, created_at: source.created_at }
+          : { id: source.id, auction_id: source.auction_id, username: source.username };
+        pending.set(kind + ':' + source.id, { kind, record });
+      }
+      if (pending.size && timer === null) timer = setTimeout(flush, 1000);
+    }
     for (const event of events) for (const socket of sockets) for (const [topic, channel] of socket.channels) {
       const ids = channel.bindings.filter(binding => binding.table === event.table && (binding.event === "*" || binding.event === event.type) &&
         (!binding.filter || binding.filter === `auction_id=eq.${event.record.auction_id}`)).map(binding => binding.id);
@@ -159,7 +192,7 @@ async function createPage(name, path, person) {
   await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
   await page.call("Emulation.setLocaleOverride", { locale: "en-US" });
   page.on("Runtime.exceptionThrown", event => failures.push({ view: name, error: event.exceptionDetails.text, description: event.exceptionDetails.exception?.description }));
-  await page.call("Page.addScriptToEvaluateOnNewDocument", { source: `(${installFixtures})(${JSON.stringify({ person, storageKey })})` });
+  await page.call("Page.addScriptToEvaluateOnNewDocument", { source: `(${installFixtures})(${JSON.stringify({ person, storageKey, batchedRealtime })})` });
   await page.call("Fetch.enable", { patterns: [{ urlPattern: "*supabase.co*" }, { urlPattern: `${origin}/api/admin/*` }] });
   page.on("Fetch.requestPaused", async ({ requestId, request }) => {
     try {
@@ -189,7 +222,7 @@ async function createPage(name, path, person) {
       }
       else if (url.pathname.endsWith("/get_my_participant_with_contact")) body = person ? [{ ...person, auction_id: auction.id }] : [];
       else if (url.pathname.endsWith("/get_my_auction_identity_with_contact")) body = person ? [person] : [];
-      else if (url.pathname === "/auth/v1/user") body = { id: person?.id, aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {} };
+      else if (url.pathname === "/auth/v1/user") body = { id: person?.id ?? "90000000-0000-4000-8000-000000000001", aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {} };
       else throw new Error(`Unmocked request: ${request.method} ${url.pathname}`);
       if (delay) await pause(delay);
       if (admin) activeAdminReads--;
@@ -228,6 +261,10 @@ try {
   await waitFor(async () => (await all("/\\blive\\b/i.test(document.body.innerText)")).every(Boolean), "all pages synchronized");
   await waitFor(async () => (await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("!!document.querySelector('#bid-amount') && !document.querySelector('#bid-amount').disabled")))).every(Boolean), "both bidder sessions ready");
   results.push({ scenario: "Four independent browser contexts load the same active auction and become live", passed: true });
+  if (batchedRealtime) {
+    assert((await all("window.__qaRawBidSubscriptions() === 0")).every(Boolean));
+    results.push({ scenario: "All four views use the shared private Broadcast with zero raw bid/name subscriptions", passed: true });
+  }
 
   // Force a snapshot captured before the burst to finish much later.
   adminDelay = 2_000; dashboardDelay = 2_000;
@@ -308,6 +345,11 @@ try {
   assert.equal(submittedBids.at(-1).amount, 8000);
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
   results.push({ scenario: "A real bidder form accepts €8,000 above the old maximum increase; all four views update to the new leader", passed: true });
+  const missed = { ...bid(4_000, 9000), username: participants[100].username, participant_id: participants[100].id };
+  bids.push(missed);
+  await all("window.dispatchEvent(new Event('online'))");
+  await waitFor(async () => (await all(`document.body.innerText.includes(${JSON.stringify(money(9000))})`)).every(Boolean), "missed notification repaired by snapshots");
+  results.push({ scenario: "A missed live notification is repaired from the common server snapshot in all four views", passed: true });
 
   auction.winner_count = 15;
   await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
@@ -336,7 +378,7 @@ try {
   throw error;
 } finally {
   await writeFile(new URL(`../qa/${resultName}.json`, import.meta.url), JSON.stringify({
-    date: new Date().toISOString(), mode: "Isolated local production browser, HTTP/Realtime fixtures; no Supabase writes or real service load test", results, failures,
+    date: new Date().toISOString(), mode: "Isolated local production browser, HTTP/Realtime fixtures; no Supabase writes or real service load test", batchedRealtime, results, failures,
   }, null, 2) + "\n");
   for (const { page, browserContextId } of pages) {
     await browser.call("Target.disposeBrowserContext", { browserContextId }).catch(() => undefined);

@@ -8,6 +8,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Duplicate display-name prevention per product lot
 - Realtime bid history, highest bid, leading participant, and connection state
 - Incremental Realtime updates without per-event dashboard refetches, plus a single consistent reconnect snapshot
+- Optional database-side batching of public bid/name notifications into a private Broadcast once per second, with automatic connection recovery
 - Database-ranked leaderboard with one best bid per participant, personal rank, and final winner state
 - A synchronized 15-second public start countdown using a shared application-server clock, followed by a configurable visual auction timer that remains display-only; closing stays a manual administrator action
 - Atomic bid acceptance that locks the auction, derives participant identity from `auth.uid()`, enforces status/time and positive two-decimal amounts, and stores every accepted bid in PostgreSQL
@@ -68,6 +69,7 @@ Copy `.env.example` to `.env.local` and set:
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Supabase publishable key (the legacy anon key also works) |
+| `NEXT_PUBLIC_BATCHED_REALTIME` | Browser-safe | `true` enables private Broadcast batches after the migration and Cron checks; default `false` retains Postgres Changes |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Allows the protected admin API to manage auctions |
 | `ADMIN_SECRET` | Server only | Administrator login secret; use at least 16 random characters |
 
@@ -96,7 +98,17 @@ When a page comes back online, becomes visible again, or rejoins the event queue
 
 All views process Realtime notifications in fixed 16-millisecond display windows. A burst is deduplicated and ranked as a group per window; continuous traffic never postpones the display deadline. New accepted bids remain visible while a snapshot request is pending, and notifications received during that request are replayed over its response. Administration uses the same complete public dashboard leaderboard for winning places and live donation totals. Its visible history stays limited to the latest 500 accepted bids, matching the existing database RPC; older winning bids remain part of the complete rankings and totals. Private contact details and finalized reports still come only from protected API reads, coalesced over one second. Initial same-event loads are deduplicated. Background reads do not overlap: updates arriving during a request schedule one follow-up. Rejoining, returning online, visibility restoration, and a 15-second fallback also refresh administration. The administrator's selected event, unsaved form edits and new-event form are preserved. Repeated currency/time formatting reuses formatters, and unchanged administration bid rows do not rerender.
 
-The browser fixture check in `scripts/qa-realtime-bursts.mjs` runs against an isolated local production server and a headless Chromium debugging endpoint (`QA_ORIGIN` and `QA_DEBUG_ORIGIN`, default ports 3001 and 9228). It intercepts all Supabase traffic and administration API requests and writes results to `qa/realtime-burst-results.json`. This tests delivered-message processing and view convergence, without placing real bids or measuring Free-tier service capacity.
+### Batched live transport
+
+The implementation is prepared and locally verified; it has not been activated in the existing hosted project. Apply [`20261112092653_batch_auction_broadcast.sql`](supabase/migrations/20261112092653_batch_auction_broadcast.sql) after all preceding migrations, including the any-positive-bid rule. It creates a private transactional outbox and the `auction-live-batches` Cron job. Once per second the job sends up to 1,000 public bid/name records together to the receive-only private topic `auction-live`. Failed database message inserts retain the queue for retry; overflow is delivered on later ticks. Every bid remains a separate database record. Event starts, ends and queue changes retain their low-volume Postgres Changes channel. Snapshots still recover notifications missed after a successful send.
+
+Verify the job, private channel authorization and actual delivery on staging using [`LIVE_AUCTION_RUNBOOK.md`](LIVE_AUCTION_RUNBOOK.md), then set `NEXT_PUBLIC_BATCHED_REALTIME=true` and rebuild/redeploy. Next.js embeds this switch into the browser bundle at build time. Until then, the existing transport stays enabled. Returning the switch to `false` and rebuilding restores it without changing bid data.
+
+All views automatically obtain or reuse an anonymous Auth session to receive the private stream, including presentation and administration. This creates no participant registration and sends no private contact data. Configure the relevant Auth limits for guests sharing one public venue IP. Connection setup failures retry automatically with increasing delays; the SDK handles established channel reconnects.
+
+A participant sees their accepted RPC receipt immediately; other views normally update on the next one-second tick plus network/render latency. More than 1,000 queued records, failed sends or service overload increase that delay. The publisher limit is a notification limit, not a proven database bid-throughput guarantee. With 300 connected views and one batch per second, the bid/name stream produces about 300 WebSocket deliveries per second instead of one delivery per bid per view. Lifecycle traffic, connections, payload size, database work and hosting usage still count toward service limits. Bid RPCs and the Cron publisher run directly in Supabase; they do not require a Netlify function per bid.
+
+The browser fixture check in `scripts/qa-realtime-bursts.mjs` runs against an isolated local production server and a headless Chromium debugging endpoint (`QA_ORIGIN` and `QA_DEBUG_ORIGIN`, default ports 3001 and 9228). It intercepts all Supabase traffic and administration API requests and writes results to `qa/realtime-burst-results.json`. For a build with batching enabled, set `QA_BATCHED_REALTIME=true`; `QA_RESULT_NAME` allows a separate result filename. This tests delivered-message processing and view convergence, without placing real bids or measuring hosted service capacity.
 
 Realtime delivers updates with normal network latency; simultaneous rendering in the same millisecond on independent devices is not guaranteed. Periodic reconciliation repairs silently missed notifications when network requests succeed. Neither a disconnected device nor an overloaded service can be guaranteed to display the latest state until connectivity recovers.
 
@@ -120,7 +132,7 @@ npm run build
 npm run loadtest:auction -- --help
 ```
 
-The tests cover currency parsing, live rankings, winner selection and database acceptance. `bid-database.test.ts` applies all migrations to isolated PGlite PostgreSQL, with only Supabase Auth context stubbed and the unsupported pgcrypto extension declaration omitted. It verifies persistence of low and equal bids, invalid amounts, permissions, registration, repeat protection and event boundaries. Real multi-connection contention and hosted Realtime delivery still require a disposable Supabase staging project.
+The tests cover currency parsing, live rankings, winner selection, database acceptance and batch recovery. The database tests apply all migrations to isolated PGlite PostgreSQL through `test-auction-database.ts`. Managed Supabase Auth, Realtime and Cron services are adapted, and unsupported pgcrypto/pg_cron extension declarations are omitted; application functions, triggers and RLS execute as real PostgreSQL. They verify persistence of low and equal bids, invalid amounts, permissions, registration, repeat protection, event boundaries, 300 bids in one public-only batch, overflow and silent send failures. Real multi-connection contention, Cron scheduling and hosted Realtime delivery still require a disposable Supabase staging project.
 
 For the 300-participant rehearsal, production settings, acceptance criteria, and incident procedure, follow [`LIVE_AUCTION_RUNBOOK.md`](LIVE_AUCTION_RUNBOOK.md).
 
@@ -128,7 +140,7 @@ For the 300-participant rehearsal, production settings, acceptance criteria, and
 
 The repository includes [`netlify.toml`](netlify.toml) with `npm run build`, Node.js 22, and the official Netlify Next.js runtime.
 
-In **Netlify → Site configuration → Environment variables**, configure all four variables above for the Production context (and Deploy Previews if needed). Trigger a new deploy after changing environment variables. The application uses the hosted Supabase project in production and has no dependency on a local server or local database.
+In **Netlify → Site configuration → Environment variables**, configure the four required connection/admin variables above for the Production context (and Deploy Previews if needed). Set the optional batching switch only after database verification. Trigger a new deploy after changing environment variables. The application uses the hosted Supabase project in production and has no dependency on a local server or local database.
 
 For Supabase Auth, add the final Netlify domain under **Authentication → URL Configuration**. Anonymous sign-in itself does not redirect, but setting the project site URL now avoids surprises if other providers are added later.
 

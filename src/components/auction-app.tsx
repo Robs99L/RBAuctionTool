@@ -18,6 +18,7 @@ import {
   type LiveParticipantInsert,
 } from "@/lib/auction-live-state";
 import { createLiveEventBatcher } from "@/lib/live-event-batcher";
+import { subscribeAuctionBatches, usesAuctionBroadcast } from "@/lib/auction-broadcast";
 import { applyAuctionQueueEvent, selectNextAuction, selectParticipantAuction, type AuctionQueueEvent } from "@/lib/auction-queue";
 import { getAuctionNow } from "@/lib/auction-clock";
 import { useAuctionClock } from "@/lib/use-auction-clock";
@@ -546,6 +547,40 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
     const fallbackRefresh = window.setTimeout(() => {
       if (!subscribed) recoverSnapshot();
     }, 4_000);
+
+    if (usesAuctionBroadcast()) {
+      const stop = subscribeAuctionBatches(client, {
+        onEvents: events => { events.forEach(handleLiveEvent); },
+        onStatus: status => {
+          if (!active) return;
+          if (status === "SUBSCRIBED") {
+            subscribed = true;
+            auctionConnectedRef.current = true;
+            window.clearTimeout(fallbackRefresh);
+            recoverSnapshot();
+          } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+            subscribed = false;
+            auctionConnectedRef.current = false;
+            setConnection("offline");
+          }
+        },
+        onError: error => {
+          if (!active) return;
+          auctionConnectedRef.current = false;
+          setConnection("offline");
+          setError(error.message);
+        },
+      });
+      return () => {
+        active = false;
+        stop();
+        auctionConnectedRef.current = false;
+        snapshotGenerationRef.current += 1;
+        snapshotRequestRef.current = null;
+        liveEventBufferRef.current = [];
+        window.clearTimeout(fallbackRefresh);
+      };
+    }
 
     const channel = client
       .channel(`auction:${auctionId}`)

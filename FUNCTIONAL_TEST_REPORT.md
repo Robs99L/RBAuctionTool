@@ -2,6 +2,28 @@
 
 Stand: 12. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
+## Datenbankseitig gebündelte Live-Updates
+
+Die zusätzliche Bündelung ist lokal implementiert und geprüft, aber **im vorhandenen Supabase-Projekt noch nicht aktiv**. `20261112092653_batch_auction_broadcast.sql` legt für angenommene Gebote und öffentliche Teilnehmernamen eine private transaktionale Warteschlange an. Der Cronjob veröffentlicht höchstens 1.000 Datensätze zusammen pro Sekunde als privaten Broadcast. Jeder Gebotsdatensatz bleibt einzeln gespeichert. Fehlgeschlagene Nachrichteninserts und Überlauf bleiben für spätere Versuche erhalten. Ereigniswechsel und Eventende laufen weiterhin über den bestehenden Queuekanal; periodische Snapshots gleichen verpasste Zustellungen ab.
+
+Bieter, Admin und Präsentation verwenden bei `NEXT_PUBLIC_BATCHED_REALTIME=true` denselben geprüften Broadcast. Die eigene Gebotsbestätigung erscheint direkt nach der RPC-Antwort, andere Ansichten normalerweise beim nächsten Sekundentakt zuzüglich Netzwerk- und Renderzeit. Eine private Empfangssession wird automatisch erzeugt oder wiederverwendet, ohne eine Teilnehmerregistrierung anzulegen. Vorübergehende Anmeldefehler lösen erneute Verbindungsversuche aus; abgelöste beziehungsweise entfernte Ansichten können keine verspäteten Kanalantworten mehr übernehmen. Ungültige Nachrichten werden vollständig verworfen und durch erneute Subscription mit frischem Snapshot ausgeglichen.
+
+| Prüfung | Ergebnis |
+| --- | --- |
+| Automatisierte Tests, TypeScript und ESLint | 150 Tests in 23 Dateien bestanden; TypeScript und ESLint bestanden |
+| PostgreSQL mit sämtlichen Anwendungsmigrationen | 300 einzelne Gebote und ein öffentlicher Name in einer Nachricht; keine Kontaktdaten im Broadcast |
+| Warteschlange und Berechtigungen | Stiller Versandfehler mit erfolgreichem Wiederholungsversuch, 1.250 Gebote über mehrere Takte, Transaktionsrollback, Empfangsberechtigung und Schutz gegen gefälschte Nachrichten bestanden |
+| Verbindungsaufbau | Erneuter Versuch nach Authfehler, Abbruch während Anmeldung, gemeinsam genutzte laufende Anmeldung, Wiederverbindung nach ungültiger Nachricht und Abbruch geplanter Wiederholung bestanden |
+| Vier unabhängige Browserkontexte im isolierten Produktionsbuild | Gemeinsamer privater Kanal; keine direkten Bid-/Teilnehmer-Subscriptions; 12 Szenarien bestanden |
+| 1.000 simulierte Gebote mit doppelten/umgeordneten Eingaben und zwei Sekunden verspäteten Snapshots | Alle Ansichten aktualisiert, bevor die alten Antworten eintrafen; im lokalen Lauf nach ungefähr 1,1 Sekunden einschließlich simulierter Bündelung |
+| Fortlaufende Gebote, persönliche Höchstgebote und Adminverlauf | Ränge/Spendensumme konsistent; ältere Gewinner trotz 500-Zeilen-Verlauf erhalten; maximal eine geschützte Hintergrundanfrage gleichzeitig |
+| Niedrige/gleiche Gebote, hohe Gebote, verpasste Nachricht, Gewinnerzahl und Eventende | Alle Ansichten konsistent; beide Gebotseingaben nach Eventende gesperrt; neues Adminformular bleibt erhalten |
+| Isolierter Produktionsbuild mit aktiviertem Schalter | Bestanden |
+
+Nachweis: [Gebündelte Live-Ansichten](qa/batched-broadcast-browser-results.json). PostgreSQL-Anwendungsfunktionen, Trigger und RLS werden in PGlite ausgeführt; Supabase Auth, Realtime und Cron sind Adapter, die nicht die tatsächlichen verwalteten Dienste ersetzen. Der Browser verwendet simulierte HTTP-/WebSocket-Antworten. Es wurden keine produktiven Gebote erzeugt, keine Migrationen im gehosteten Projekt ausgeführt und keine echten parallelen PostgreSQL-Verbindungen belastet. Die Grenze von 1.000 Datensätzen pro Veröffentlichung ist keine nachgewiesene Gebotskapazität.
+
+Bei 300 verbundenen Ansichten reduziert ein Batch pro Sekunde den Gebots-/Namensstrom auf etwa 300 WebSocket-Zustellungen pro Sekunde. Payloadgröße, Eventwechsel, Verbindungen, Authlimits und Datenbankarbeit benötigen weiterhin Reserve. Vorbereitung und Aktivierung stehen im [Live-Runbook](LIVE_AUCTION_RUNBOOK.md): Pro-Einstellungen und tatsächliche Computegröße prüfen, beide noch offenen Migrationen anwenden, Cron und private Empfangsrechte im Testprojekt prüfen, Schalter beim Build aktivieren und echte Lastgeneralprobe durchführen. Ein Netlify-Pro-Tarif ist durch diese Implementierung allein nicht erforderlich; Gebote und Publisher laufen direkt in Supabase. Die folgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Beliebige positive Gebote
 
 Gebote müssen weder den Startpreis noch das bisherige Höchstgebot übertreffen. Jeder positive Betrag mit maximal zwei Nachkommastellen innerhalb von `numeric(12, 2)` wird als eigener Datensatz gespeichert, auch gleiche Beträge und niedrigere Folgegebote. Rangliste, Gewinner und Spendensumme verwenden weiterhin das höchste Gebot je Person; ein kleineres Folgegebot reduziert keine bestehende Verpflichtung. Die neue Migration ersetzt ausschließlich die Betragsregeln in `place_bid`. Anmeldung, vollständige Registrierung, Eventgrenzen, Transaktionssperre und der Abstand von 300 Millisekunden zwischen Geboten derselben Person bleiben bestehen. Bieteransicht und Demo prüfen dieselbe Betragsgültigkeit. Überholte Mindest-/Maximalanzeigen wurden entfernt; vorhandene Adminwerte bleiben für bestehende Events erhalten, die zugehörigen Eingabefelder sind ausgeblendet. Alte Excelvorlagen bleiben lesbar und erhalten aktualisierte Hinweise.

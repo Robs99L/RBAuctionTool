@@ -12,6 +12,7 @@ Required environment variables:
   LOAD_TEST_SERVICE_ROLE_KEY=<staging service role key>
 
 Optional:
+  LOAD_TEST_BATCHED_REALTIME=true  # after the Broadcast migration is active
   LOAD_TEST_USERS=300
   LOAD_TEST_BID_ROUNDS=3
   LOAD_TEST_ROUND_INTERVAL_MS=1000`);
@@ -25,6 +26,7 @@ const serviceRoleKey = process.env.LOAD_TEST_SERVICE_ROLE_KEY;
 const userCount = Number(process.env.LOAD_TEST_USERS ?? 300);
 const bidRounds = Number(process.env.LOAD_TEST_BID_ROUNDS ?? 3);
 const roundIntervalMs = Number(process.env.LOAD_TEST_ROUND_INTERVAL_MS ?? 1000);
+const batchedRealtime = process.env.LOAD_TEST_BATCHED_REALTIME === "true";
 
 if (confirmation !== "staging-only") {
   throw new Error("Refusing to run: set LOAD_TEST_CONFIRM=staging-only for a disposable staging project.");
@@ -47,6 +49,7 @@ const participants = [];
 let auctionId = null;
 let bidMessages = 0;
 let participantMessages = 0;
+let batchMessages = 0;
 
 function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -59,7 +62,19 @@ function percentile(values, fraction) {
 }
 
 async function subscribe(client, index) {
-  const channel = client
+  const seen = new Set();
+  const channel = batchedRealtime ? client
+    .channel('auction-live', { config: { private: true } })
+    .on('broadcast', { event: 'auction_batch' }, ({ payload }) => {
+      if (payload?.protocol !== 1 || !Array.isArray(payload.events)) return;
+      batchMessages++;
+      for (const event of payload.events) {
+        if (event.record?.auction_id !== auctionId || seen.has(event.kind + ':' + event.record.id)) continue;
+        seen.add(event.kind + ':' + event.record.id);
+        if (event.kind === 'bid') bidMessages++;
+        if (event.kind === 'participant') participantMessages++;
+      }
+    }) : client
     .channel(`load-test:${runId}:${index}`)
     .on(
       "postgres_changes",
@@ -189,6 +204,7 @@ try {
 
   const deliveryRatio = expectedBidMessages ? bidMessages / expectedBidMessages : 1;
   const report = {
+    transport: batchedRealtime ? "private-broadcast-batches" : "postgres-changes",
     users: userCount,
     bidRounds,
     registrationDurationMs: Math.round(registrationDurationMs),
@@ -201,6 +217,7 @@ try {
     acceptedBids,
     bidMessages,
     participantMessages,
+    batchMessages,
     realtimeDeliveryPercent: Number((deliveryRatio * 100).toFixed(2)),
   };
   console.log(JSON.stringify(report, null, 2));
