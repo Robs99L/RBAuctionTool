@@ -1,5 +1,5 @@
 // Read-only browser fixtures. All Supabase traffic and admin APIs are intercepted.
-// Start an isolated build and headless Chromium with remote debugging before running.
+// Start a local server and headless Chromium with remote debugging before running.
 import { readFile, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
@@ -241,7 +241,7 @@ async function createPage(name, path, person) {
 async function waitFor(check, message, timeout = 15_000) {
   const start = performance.now();
   while (performance.now() - start < timeout) { if (await check()) return; await pause(50); }
-  const state = await all("({text:document.body.innerText.slice(0,1500),sockets:window.__qaSockets?.()})");
+  const state = await all("({text:document.body?.innerText.slice(0,1500),sockets:window.__qaSockets?.()})");
   throw new Error(`Timed out: ${message}; ${JSON.stringify(state)}`);
 }
 const all = expression => Promise.all(pages.map(({ page }) => page.evaluate(expression)));
@@ -263,12 +263,16 @@ async function viewsAgree(amount) {
 async function assertHiddenPresentationAmounts() {
   assert(await pages[0].page.evaluate("!/[€]|\\bEUR\\b/.test(document.body.innerText) && document.querySelectorAll('ol[aria-label] li > strong').length === 0"), "live presentation must contain no currency values");
 }
+async function assertAdminRanking() {
+  const actual = await pages[1].page.evaluate("Array.from(document.querySelectorAll('ol[aria-label=\"Bid ranking\"] li')).map(row => ({rank:Number(row.querySelector(':scope > span').textContent),name:row.querySelector('p span').textContent,amount:row.querySelector(':scope > strong').textContent,bidTime:row.querySelector('time').getAttribute('datetime')}))");
+  assert.deepEqual(actual, rows().map(row => ({ rank: row.bidder_rank, name: row.username, amount: money(row.amount), bidTime: row.created_at })));
+}
 async function capturePresentation(label, width, height) {
   const page = pages[0].page;
   await page.call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 901 });
   await pause(250);
   const screenshot = await page.call("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
-  await writeFile(new URL(`../qa/presentation-winners-${label}.png`, import.meta.url), Buffer.from(screenshot.data, "base64"));
+  await writeFile(new URL(`../qa/${resultName}-${label}.png`, import.meta.url), Buffer.from(screenshot.data, "base64"));
   const layout = await page.evaluate("({width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight})");
   assert(layout.scrollWidth <= width, "presentation must not overflow horizontally");
   if (width > 900) assert(layout.scrollHeight <= height, "16:9 presentation must fit the viewport");
@@ -280,7 +284,7 @@ try {
   await createPage("admin", "/admin");
   await createPage("bidder1", "/", participants[0]);
   await createPage("bidder2", "/", participants[1]);
-  await waitFor(async () => (await all("/\\blive\\b/i.test(document.body.innerText)")).every(Boolean), "all pages synchronized");
+  await waitFor(async () => (await all("/\\blive\\b/i.test(document.body?.innerText ?? '')")).every(Boolean), "all pages synchronized");
   await waitFor(async () => (await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("!!document.querySelector('#bid-amount') && !document.querySelector('#bid-amount').disabled")))).every(Boolean), "both bidder sessions ready");
   results.push({ scenario: "Four independent browser contexts load the same active auction and become live", passed: true });
   await assertHiddenPresentationAmounts();
@@ -311,11 +315,11 @@ try {
   const admin = pages[1].page;
   const actualTop = await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)");
   assert.deepEqual(actualTop, rows().slice(0, 12).map(row => row.username));
-  assert.equal(await admin.evaluate("document.querySelector('aside ol').children.length"), 500);
+  await assertAdminRanking();
   for (const { page } of pages.slice(2)) {
     assert.equal(await page.evaluate("Array.from(document.querySelectorAll('h2')).find(h=>h.textContent==='Leaderboard').closest('section').querySelectorAll('ol li').length"), 300);
   }
-  results.push({ scenario: "After stale responses: presentation shows only 12 current winners without amounts; full 300-person bidder ranking and latest 500 admin history rows agree", passed: true });
+  results.push({ scenario: "After stale responses: presentation shows only 12 winners without amounts; participant and admin rankings include all 300 people, with highest bid amounts and matching timestamps in administration", passed: true });
 
   const beforeReads = adminReads;
   adminDelay = 600; dashboardDelay = 0;
@@ -328,7 +332,7 @@ try {
   await waitFor(() => viewsAgree(2099), "continuous traffic convergence");
   await pause(1_800);
   assert.equal(peakAdminReads, 1);
-  assert.equal(await admin.evaluate("document.querySelector('aside ol').children.length"), 500);
+  await assertAdminRanking();
   const winningNames = await admin.evaluate("Array.from(document.querySelectorAll('aside ol li')).filter(li=>li.innerText.includes('Winner #')).map(li=>li.querySelector('p span').textContent)");
   assert.deepEqual(winningNames.sort(), rows().slice(0, 12).map(row => row.username).sort());
   await assertHiddenPresentationAmounts();
@@ -341,9 +345,9 @@ try {
   await pause(2_000);
   const donation = money(rows().slice(0, 12).reduce((sum, row) => sum + row.amount, 0));
   assert(await admin.evaluate(`document.body.innerText.includes(${JSON.stringify(donation)})`));
-  assert.equal(await admin.evaluate("document.querySelector('aside ol').children.length"), 500);
+  await assertAdminRanking();
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
-  results.push({ scenario: "600 consecutive bids by one participant: older winning bidders remain ranked and the admin donation total includes winners absent from its 500 recent rows", passed: true });
+  results.push({ scenario: "600 consecutive bids by one participant: the complete admin ranking retains all older bidders with their correct amounts and times, and donation totals still agree", passed: true });
 
   // Exercise the real input form and RPC path. The database tests separately
   // verify PostgreSQL acceptance; this fixture verifies all view updates.
@@ -362,7 +366,7 @@ try {
   await submitFrom([pages[2]], 0.01);
   assert.deepEqual(submittedBids.map(record => record.amount), [50, 50, 0.01]);
   assert.deepEqual(rows().map(row => ({ id: row.bid_id, amount: row.amount })), beforeLower);
-  await waitFor(async () => await admin.evaluate("document.querySelector('aside ol').innerText.includes('€0.01')"), "lower bid in admin history");
+  await assertAdminRanking();
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
   results.push({ scenario: "Both real bidder forms accept identical €50 bids below the €500 opening price and leader; a €0.01 follow-up is also saved while personal bests and all rankings remain unchanged", passed: true });
   await submitFrom([pages[2]], 8000);
@@ -426,7 +430,7 @@ try {
   throw error;
 } finally {
   await writeFile(new URL(`../qa/${resultName}.json`, import.meta.url), JSON.stringify({
-    date: new Date().toISOString(), mode: "Isolated local production browser, HTTP/Realtime fixtures; no Supabase writes or real service load test", batchedRealtime, results, failures,
+    date: new Date().toISOString(), mode: "Isolated local browser, HTTP/Realtime fixtures; no Supabase writes or real service load test", batchedRealtime, results, failures,
   }, null, 2) + "\n");
   for (const { page, browserContextId } of pages) {
     await browser.call("Target.disposeBrowserContext", { browserContextId }).catch(() => undefined);

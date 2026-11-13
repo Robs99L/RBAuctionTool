@@ -600,7 +600,7 @@ function AuctionEditor({ onSignedOut }: { onSignedOut: () => void }) {
       auctions={auctions}
       auction={auction}
       bids={bids}
-      leaderboard={dashboard.standings.leaderboard}
+      leaderboard={dashboard.loadedAuctionId === auction?.id ? dashboard.standings.leaderboard : []}
       donationTotals={donationTotals}
       winnerReport={winnerReport}
       form={form}
@@ -992,11 +992,23 @@ function AuctionManagerView({
   const selectedIndex = auction ? auctions.findIndex((item) => item.id === auction.id) : -1;
   const [confirmation, setConfirmation] = useState<"start" | "end" | "delete" | null>(null);
 
-  const winningRanks = new Map(
-    leaderboard
-      ? leaderboard.filter(entry => entry.is_winner).map(entry => [entry.bid_id, entry.bidder_rank])
-      : (auction ? selectWinningBids(bids, auction.winner_count) : []).map(bid => [bid.id, bid.rank]),
-  );
+  const rankedBidders = useMemo<LeaderboardEntry[]>(() => {
+    if (!auction) return [];
+    if (leaderboard) return leaderboard;
+    return selectWinningBids(bids, Number.MAX_SAFE_INTEGER).map(bid => ({
+      bid_id: bid.id,
+      participant_id: bid.participant_id,
+      username: bid.username,
+      amount: bid.amount,
+      created_at: bid.created_at,
+      bidder_rank: bid.rank,
+      is_winner: bid.rank <= auction.winner_count,
+      is_final: auction.status === "ended",
+    }));
+  }, [auction, bids, leaderboard]);
+  const participantEmails = useMemo(() => new Map(
+    bids.filter(bid => bid.email).map(bid => [bid.participant_id, bid.email]),
+  ), [bids]);
 
   function updateField(field: keyof FormState, value: string) {
     onFormChange({ ...form, [field]: value });
@@ -1205,8 +1217,8 @@ function AuctionManagerView({
           <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Selected event</p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid history</h2>
-              {!demo && <p className="mt-1 text-xs text-ink/45">Latest 500 accepted bids; winner ranks use the complete leaderboard.</p>}
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Bid ranking</h2>
+              <p className="mt-1 text-xs text-ink/45">Highest bid per person, ranked from highest to lowest.</p>
               {!demo && <p className="mt-1 text-xs text-ink/60" role="status">{connection === "live" ? "Live" : connection === "connecting" ? "Synchronizing…" : "Reconnecting…"}</p>}
               {auction && (
                 <div className="mt-1 space-y-1 text-xs text-ink/45">
@@ -1219,9 +1231,20 @@ function AuctionManagerView({
             </div>
             <button className="text-link min-h-11" onClick={onRefresh}>Refresh</button>
           </div>
-          {bids.length && auction ? (
-            <ol className="mt-5 divide-y divide-ink/10">
-              {bids.map(bid => <AdminBidRow key={bid.id} bid={bid} winningRank={winningRanks.get(bid.id)} currency={auction.currency} />)}
+          {rankedBidders.length && auction ? (
+            <ol className="mt-5 divide-y divide-ink/10" aria-label="Bid ranking">
+              {rankedBidders.map(entry => (
+                <AdminRankRow
+                  key={entry.participant_id}
+                  rank={entry.bidder_rank}
+                  username={entry.username}
+                  amount={entry.amount}
+                  createdAt={entry.created_at}
+                  isWinner={entry.is_winner}
+                  email={participantEmails.get(entry.participant_id) ?? ""}
+                  currency={auction.currency}
+                />
+              ))}
             </ol>
           ) : (
             <div className="mt-5 rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">No accepted bids for this event yet.</div>
@@ -1305,20 +1328,24 @@ function AuctionManagerView({
   );
 }
 
-const AdminBidRow = memo(function AdminBidRow({ bid, winningRank, currency }: {
-  bid: AdminBid; winningRank?: number; currency: string;
+const AdminRankRow = memo(function AdminRankRow({ rank, username, amount, createdAt, isWinner, email, currency }: {
+  rank: number; username: string; amount: number; createdAt: string;
+  isWinner: boolean; email: string; currency: string;
 }) {
   return (
-    <li className="flex items-start justify-between gap-3 py-3">
+    <li className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-2 py-3">
+      <span className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold ${isWinner ? "bg-lime" : "bg-ink/5"}`}>
+        {rank}
+      </span>
       <div className="min-w-0">
         <p className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold">
-          <span className="max-w-full truncate">{bid.username}</span>
-          {winningRank && <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{winningRank}</span>}
+          <span className="max-w-full truncate">{username}</span>
+          {isWinner && <span className="shrink-0 rounded-full bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">Winner #{rank}</span>}
         </p>
-        <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
-        {bid.email && <p className="mt-0.5 truncate text-xs text-ink/45">{bid.email}</p>}
+        <p className="mt-0.5 text-xs text-ink/45">Bid at <time dateTime={createdAt}>{formatTime(createdAt)}</time></p>
+        {email && <p className="mt-0.5 truncate text-xs text-ink/45">{email}</p>}
       </div>
-      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{formatMoney(bid.amount, currency)}</strong>
+      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums">{formatMoney(amount, currency)}</strong>
     </li>
   );
 });

@@ -1,0 +1,106 @@
+{
+  "date": "2026-11-13T16:11:09.805Z",
+  "mode": "Isolated local browser, HTTP/Realtime fixtures; no Supabase writes or real service load test",
+  "batchedRealtime": false,
+  "results": [
+    {
+      "scenario": "Four independent browser contexts load the same active auction and become live",
+      "passed": true
+    },
+    {
+      "scenario": "1,000 bids / 2,000 shuffled duplicated notifications per view appear before two-second stale snapshots finish",
+      "passed": true,
+      "timing": [
+        {
+          "view": "presentation",
+          "deliveryMs": 119.40000003576279,
+          "visibleMs": 230.60000002384186
+        },
+        {
+          "view": "admin",
+          "deliveryMs": 123,
+          "visibleMs": 647.5
+        },
+        {
+          "view": "bidder1",
+          "deliveryMs": 173.10000002384186,
+          "visibleMs": 553.5
+        },
+        {
+          "view": "bidder2",
+          "deliveryMs": 103.60000002384186,
+          "visibleMs": 404.60000002384186
+        }
+      ]
+    },
+    {
+      "scenario": "After stale responses: presentation shows only 12 winners without amounts; participant and admin rankings include all 300 people, with highest bid amounts and matching timestamps in administration",
+      "passed": true
+    },
+    {
+      "scenario": "Another 1,000 bids in a sustained stream: all views converge, no overlapping protected reads, same 12 winners",
+      "passed": true,
+      "protectedReads": 1,
+      "peakConcurrentReads": 1
+    },
+    {
+      "scenario": "600 consecutive bids by one participant: the complete admin ranking retains all older bidders with their correct amounts and times, and donation totals still agree",
+      "passed": true
+    },
+    {
+      "scenario": "Both real bidder forms accept identical €50 bids below the €500 opening price and leader; a €0.01 follow-up is also saved while personal bests and all rankings remain unchanged",
+      "passed": true
+    },
+    {
+      "scenario": "A real bidder form accepts €8,000 above the old maximum increase; all four views update to the new leader, presentation still hides amounts",
+      "passed": true
+    },
+    {
+      "scenario": "A missed live notification is repaired from the common server snapshot in all four views",
+      "passed": true
+    },
+    {
+      "scenario": "Two winning places show exactly two names, with no remaining Top 10 rows or currency values",
+      "passed": true
+    },
+    {
+      "scenario": "Elapsed visual timer keeps amounts hidden and bidding open until the administrator ends the event",
+      "passed": true
+    },
+    {
+      "scenario": "Realtime winner-count update expands presentation to exactly 15 winners without amounts",
+      "passed": true
+    },
+    {
+      "scenario": "Event end reveals each winner's amount in the presentation leaderboard, disables both bidder forms and survives older active snapshots",
+      "passed": true
+    },
+    {
+      "scenario": "Live names and final amounts fit desktop, 16:9 slide and mobile layouts without horizontal overflow",
+      "passed": true,
+      "liveLayout": {
+        "width": 1920,
+        "height": 1080,
+        "scrollWidth": 1920,
+        "scrollHeight": 1080
+      },
+      "finalLayout": {
+        "width": 1280,
+        "height": 720,
+        "scrollWidth": 1280,
+        "scrollHeight": 720
+      },
+      "mobileLayout": {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390,
+        "scrollHeight": 2330
+      }
+    },
+    {
+      "scenario": "An unsaved new-event form remains selected during unrelated live traffic",
+      "passed": true
+    }
+  ],
+  "failures": []
+}
