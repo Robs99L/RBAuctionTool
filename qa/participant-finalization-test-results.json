@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-13T15:53:35.167Z",
+  "mode": "Separate browser profile, local demo and localStorage only; no production writes",
+  "results": [
+    {
+      "scenario": "Local registration opens the participant view and bid form",
+      "passed": true
+    },
+    {
+      "scenario": "Participant view contains no Activity or Recent bids section",
+      "passed": true
+    },
+    {
+      "scenario": "Active participant leaderboard shows names and ranks without amounts",
+      "passed": true
+    },
+    {
+      "scenario": "A lower €50 bid is accepted and saved; participant enters the ranking",
+      "passed": true
+    },
+    {
+      "scenario": "A €1,000 bid makes the participant the leader and updates the open presentation tab without showing amounts",
+      "passed": true
+    },
+    {
+      "scenario": "Admin demo displays the same participant and bid data",
+      "passed": true
+    },
+    {
+      "scenario": "Mobile participant view fits 390px width without horizontal overflow or an Activity section",
+      "passed": true
+    },
+    {
+      "scenario": "Elapsed visual timer does not reveal participant leaderboard amounts",
+      "passed": true
+    },
+    {
+      "scenario": "Opening admin end confirmation keeps leaderboard amounts hidden",
+      "passed": true
+    },
+    {
+      "scenario": "Confirmed event end reveals all final participant bid amounts and final presentation winner amounts, then locks bidding",
+      "passed": true
+    },
+    {
+      "scenario": "Final participant leaderboard amounts fit the mobile layout without horizontal overflow",
+      "passed": true
+    }
+  ],
+  "failures": []
+}

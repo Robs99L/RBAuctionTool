@@ -1049,6 +1049,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
   const [resultReadyAuctionId, setResultReadyAuctionId] = useState<string | null>(null);
   const [dismissedResultAuctionId, setDismissedResultAuctionId] = useState<string | null>(null);
   const status = effectiveStatus(auction);
+  const showLeaderboardAmounts = auction.status === "ended";
   const countdownOpen = useBiddingOpen(status, auction.starts_at);
   const biddingOpen = countdownOpen && connection === "live";
   const starting = status === "active" && !countdownOpen;
@@ -1187,11 +1188,11 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
               </div>
             )}
             {leaderboard.length ? (
-              <ol className="divide-y divide-ink/10">
+              <ol className="divide-y divide-ink/10" aria-label={showLeaderboardAmounts ? "Final bidders and bids" : "Current bidder standings"}>
                 {leaderboard.map((entry) => (
                   <li
                     key={entry.participant_id}
-                    className={`grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 py-3 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto] sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
+                    className={`grid ${showLeaderboardAmounts ? "grid-cols-[2rem_minmax(0,1fr)_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto]" : "grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_minmax(0,1fr)]"} items-center gap-2 py-3 sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
                   >
                     <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold sm:h-9 sm:w-9 ${entry.is_winner ? "bg-lime" : "bg-ink/5"}`}>
                       {entry.bidder_rank}
@@ -1204,7 +1205,9 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                         </span>
                       )}
                     </div>
-                    <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(entry.amount, auction.currency)}</strong>
+                    {showLeaderboardAmounts && (
+                      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(entry.amount, auction.currency)}</strong>
+                    )}
                   </li>
                 ))}
               </ol>
