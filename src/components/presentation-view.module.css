@@ -102,7 +102,7 @@
 .closed { border-color: #ebd0c8; background: #f7e8e3; color: #913d32; }
 .title { margin: 14px 0 0; overflow-wrap: anywhere; font-size: clamp(28px, 2.1vw, 44px); font-weight: 750; letter-spacing: -.035em; line-height: 1.1; }
 .description { display: -webkit-box; overflow: hidden; margin: 16px 0 0; color: #5b6b63; font-size: clamp(18px, 1.3vw, 25px); line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.eventRules { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: auto; padding-top: 12px; }
+.eventRules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: auto; padding-top: 12px; }
 .eventRules > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; border: 1px solid #e0e4d5; border-radius: 9px; background: #f1f3e8; padding: 12px; }
 .eventRules span { display: block; color: var(--presentation-muted); font-size: clamp(16px, 1.2vw, 22px); }
 .eventRules strong { display: block; overflow-wrap: anywhere; font-size: clamp(20px, 1.3vw, 26px); font-variant-numeric: tabular-nums; }
@@ -126,16 +126,14 @@
   filter: drop-shadow(0 3px 4px #06143124);
   pointer-events: none;
 }
-.leaderboardHeader { display: grid; flex-shrink: 0; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 4px 20px; background: linear-gradient(115deg, #153d33, var(--presentation-green)); color: #fffdf4; padding: clamp(16px, 1.15vw, 22px) clamp(20px, 2vw, 36px); border-bottom: 2px solid var(--presentation-gold); }
-.leaderboardHeader > .eventHeading { grid-column: 1 / -1; margin-bottom: 8px; padding-right: clamp(40px, 4vw, 72px); }
+.leaderboardHeader { flex-shrink: 0; background: linear-gradient(115deg, #153d33, var(--presentation-green)); color: #fffdf4; padding: clamp(16px, 1.15vw, 22px) clamp(20px, 2vw, 36px); border-bottom: 2px solid var(--presentation-gold); }
+.leaderboardHeader > .eventHeading { padding-right: clamp(40px, 4vw, 72px); }
 .leaderboardHeader h2 { margin: 0; font-size: clamp(24px, 1.6vw, 32px); font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
 .bidderCount { border: 1px solid #ffffff26; border-radius: 999px; background: #ffffff0c; padding: 4px 10px; color: #d5e5d7; font-size: clamp(14px, 1vw, 18px); }
-.highestLabel { grid-column: 1 / -1; margin: 0; color: #d5e5d7; font-size: clamp(14px, 1vw, 18px); line-height: 1.2; }
-.highestAmount { grid-column: 1; margin: 0; overflow-wrap: anywhere; color: #f1d491; font-size: clamp(36px, 2.9vw, 56px); font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -.025em; line-height: 1.1; }
-.leaderName { grid-column: 2; align-self: center; min-width: 0; margin: 0; overflow-wrap: anywhere; color: #edf4e9; font-size: clamp(18px, 1.4vw, 26px); line-height: 1.2; }
 .ranking { display: flex; min-height: 0; flex: 1; flex-direction: column; padding: 8px clamp(16px, 1.8vw, 32px) 20px; }
-.rankList { display: grid; min-height: 0; flex: 1; grid-template-rows: repeat(var(--leaderboard-rows, 10), minmax(clamp(28px, 2.1vw, 42px), 1fr)); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.rankList { display: grid; min-height: 0; flex: 1; grid-template-rows: repeat(var(--leaderboard-rows, 1), minmax(clamp(28px, 2.1vw, 42px), 1fr)); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
 .rankRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 16px; min-height: 0; border-bottom: 1px solid var(--presentation-border); padding: 4px 10px; }
+.namesOnly { grid-template-columns: 48px minmax(0, 1fr); }
 .rankRow:nth-child(even) { background: #f4f5ed; }
 .rank { display: inline-flex; width: 42px; height: clamp(22px, 1.6vw, 30px); align-items: center; justify-content: center; border-radius: 7px; background: #e9ede4; color: var(--presentation-muted); font-size: clamp(18px, 1.2vw, 23px); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .bidder { display: flex; min-width: 0; align-items: center; gap: 10px; }
@@ -183,6 +181,7 @@
   .winnerBadge { margin-top: 3px; }
   .rankRow { min-height: 78px; padding: 14px 0; }
   .rankRow { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; }
+  .namesOnly { grid-template-columns: 38px minmax(0, 1fr); }
   .rank { width: 34px; }
   .bidAmount { font-size: 20px; }
   .nextEvent { max-width: 100%; text-align: left; }

@@ -10,8 +10,6 @@ import type { Auction, LeaderboardEntry } from "@/lib/types";
 
 import styles from "./presentation-view.module.css";
 
-const MIN_LEADERBOARD_LIMIT = 10;
-
 export function PresentationView({
   auction,
   leaderboard,
@@ -53,7 +51,7 @@ export function PresentationView({
     }
   }
 
-  const highest = leaderboard[0];
+  const winners = leaderboard.filter(entry => entry.is_winner);
 
   return (
     <main className={styles.screen}>
@@ -99,7 +97,6 @@ export function PresentationView({
               <h1 id="presentation-event-title" className={styles.title}>{auction.title}</h1>
               {auction.description && !auction.image_url && <p className={styles.description}>{auction.description}</p>}
               <div className={styles.eventRules}>
-                <div><span>Opening price</span><strong>{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                 <div><span>Winning places</span><strong>{auction.winner_count}</strong></div>
               </div>
               <AuctionTimer key={`${auction.id}:${auction.starts_at}`} startsAt={auction.starts_at} durationSeconds={auction.timer_duration_seconds} status={auction.status} className={styles.timer} compact />
@@ -112,13 +109,10 @@ export function PresentationView({
               <div className={styles.leaderboardHeader}>
                 <div className={styles.eventHeading}>
                   <h2 id="presentation-leaderboard-title">{auction.status === "ended" ? "Final leaderboard" : "Live leaderboard"}</h2>
-                  <span className={styles.bidderCount}>{leaderboard.length} {leaderboard.length === 1 ? "bidder" : "bidders"}</span>
+                  <span className={styles.bidderCount}>{winners.length} {winners.length === 1 ? "winner" : "winners"}</span>
                 </div>
-                <p className={styles.highestLabel}>{highest ? auction.status === "ended" ? "Highest bid" : "Current highest bid" : "Opening price"}</p>
-                <p className={styles.highestAmount}>{formatMoney(highest?.amount ?? auction.starting_price, auction.currency)}</p>
-                <p className={styles.leaderName}>{highest?.username ?? "Waiting for the first bid"}</p>
               </div>
-              <PresentationLeaderboard key={auction.id} auction={auction} leaderboard={leaderboard} />
+              <PresentationLeaderboard key={auction.id} auction={auction} winners={winners} />
             </section>
           </div>
         </div>
@@ -225,26 +219,25 @@ function ChristmasGifts() {
   );
 }
 
-function PresentationLeaderboard({ auction, leaderboard }: { auction: Auction; leaderboard: LeaderboardEntry[] }) {
-  const limit = Math.max(MIN_LEADERBOARD_LIMIT, auction.winner_count);
-  const entries = leaderboard.slice(0, limit);
+function PresentationLeaderboard({ auction, winners }: { auction: Auction; winners: LeaderboardEntry[] }) {
+  const ended = auction.status === "ended";
 
   return (
     <div className={styles.ranking}>
-      {entries.length ? (
+      {winners.length ? (
         <ol
           className={styles.rankList}
-          style={{ "--leaderboard-rows": Math.max(MIN_LEADERBOARD_LIMIT, entries.length) } as CSSProperties}
-          aria-label={`Top ${limit} highest bids per participant`}
+          style={{ "--leaderboard-rows": winners.length } as CSSProperties}
+          aria-label={ended ? "Final winners and winning bids" : "Current winning bidders"}
         >
-          {entries.map((entry) => (
-            <li key={entry.participant_id} className={`${styles.rankRow} ${entry.is_winner ? styles.winningRow : ""}`}>
+          {winners.map((entry) => (
+            <li key={entry.participant_id} className={`${styles.rankRow} ${styles.winningRow} ${ended ? "" : styles.namesOnly}`}>
               <span className={styles.rank}>#{entry.bidder_rank}</span>
               <div className={styles.bidder}>
                 <strong>{entry.username}</strong>
-                {entry.is_winner && <span className={styles.winnerBadge}>{auction.status === "ended" ? "Winner" : "Winning place"}</span>}
+                <span className={styles.winnerBadge}>{ended ? "Winner" : "Winning place"}</span>
               </div>
-              <strong className={styles.bidAmount}>{formatMoney(entry.amount, auction.currency)}</strong>
+              {ended && <strong className={styles.bidAmount}>{formatMoney(entry.amount, auction.currency)}</strong>}
             </li>
           ))}
         </ol>
@@ -255,8 +248,8 @@ function PresentationLeaderboard({ auction, leaderboard }: { auction: Auction; l
         </div>
       )}
       <div className={styles.rankFooter}>
-        <span>Highest bid per participant</span>
-        <span>Top {limit}</span>
+        <span>{ended ? "Final winning bids" : "Current winners"}</span>
+        <span>{ended ? `${winners.length} ${winners.length === 1 ? "winner" : "winners"}` : "Amounts revealed when bidding closes"}</span>
       </div>
     </div>
   );

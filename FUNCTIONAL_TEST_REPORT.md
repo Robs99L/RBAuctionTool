@@ -2,6 +2,14 @@
 
 Stand: 13. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
+## Präsentation mit Gewinnernamen und späteren Beträgen
+
+Die Präsentation zeigt ausschließlich Personen mit einem aktuellen beziehungsweise finalen Gewinnerplatz. Die frühere Mindestanzeige von zehn Personen entfällt: Zwei Gewinnerplätze ergeben zwei Namen, mehr als zehn Gewinnerplätze zeigen entsprechend mehr Personen. Rang und Gewinnerkennzeichnung bleiben sichtbar. Startpreis und Höchstgebotskachel sind entfernt. Während eines aktiven oder kommenden Events sind keine appseitigen Geldbeträge in der Präsentation sichtbar; erst nach dem manuellen Eventende erscheinen die Beträge in den Gewinnerzeilen des Leaderboards. Ein auf null abgelaufener Anzeigetimer allein blendet noch keine Beträge ein.
+
+Alle 167 Tests sowie TypeScript, ESLint und der isolierte Produktionsbuild sind bestanden. Die gemeinsame Browserprüfung mit zwei Bietern, Admin und Präsentation besteht 14 Szenarien: Gebotsschübe mit 300 simulierten Personen, verspätete Snapshots, neue Gewinner, niedrige Folgegebote, Wiederherstellung verpasster Nachrichten, genau zwei beziehungsweise 15 angezeigte Gewinner und die korrekte Betragsanzeige beim Eventende. Die Desktopdarstellung passt bei 1920 × 1080 und 1280 × 720 in den Bildschirm; bei 390 × 844 entsteht kein horizontaler Überlauf. Größere Listen können weiterhin innerhalb der Rangliste scrollen.
+
+Nachweise: [Browserprüfung](qa/presentation-winners-browser-results.json), [laufendes Event mit zwei Personen](qa/presentation-winners-live-desktop.png), [finale Gewinner mit Beträgen](qa/presentation-winners-final-slide.png) und [Mobilansicht](qa/presentation-winners-final-mobile.png). Die Prüfung verwendet ausschließlich lokale HTTP-/Realtime-Fixtures, keine produktiven Gebote oder Eventänderungen. Sie prüft die Darstellung und Synchronisierung, nicht die Kapazität des gehosteten Dienstes. Die folgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Adminanmeldung auf Netlify
 
 Der Origin-Fehler wurde am 13. November auf `https://rbchristmasauction.netlify.app/api/admin/session` mit einem numerischen Secret reproduziert: Die sichere Testeingabe wurde bereits mit HTTP 403 zurückgewiesen, bevor die Eingabeprüfung oder ein Datenbankzugriff stattfinden konnte. Die Anwendung verglich ausschließlich mit der von Next.js rekonstruierten Request-URL. Diese kann hinter dem Netlify-Adapter von der öffentlichen Browseradresse abweichen.

@@ -20,7 +20,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
-- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and a fixed leaderboard showing the top 10 or all winning places when there are more than 10
+- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and only current winning bidders; winning amounts appear in the leaderboard after the event ends
 
 ## Local setup
 
@@ -33,7 +33,7 @@ npm run dev
 
 Open `http://localhost:3000`. Administration is at `http://localhost:3000/admin`.
 
-For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays public participant names and highest bids without requiring registration. It always shows the top 10, or up to the configured number of winners when that exceeds 10, with no automatic page changes. Large lists scroll within the desktop leaderboard. Event images retain their full 16:9 slide format across all three views; the login artwork uses its original responsive layout. A periodic refresh also recovers missed event changes and bids. The shared local demo synchronizes with other tabs in the same browser.
+For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays only public names occupying a winning place, without requiring registration. During bidding it shows no opening price, highest-bid amount or leaderboard amounts. After the administrator ends the event, each final winner's amount appears in their leaderboard row. The number of visible people follows the configured winning places, including fewer than 10, with no automatic page changes. Large lists scroll within the desktop leaderboard. Event images retain their full 16:9 slide format across all three views; the login artwork uses its original responsive layout. A periodic refresh also recovers missed event changes and bids. The shared local demo synchronizes with other tabs in the same browser.
 
 For a standalone presentation preview with 12 sample bidders, open `/presentation?demo=true` in development. Add `&winners=12` to preview 12 winning places. This preview is independent of the shared demo and live auction, makes no Supabase requests, and is disabled in production.
 

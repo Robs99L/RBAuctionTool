@@ -252,6 +252,28 @@ function bid(i, amount = i + 100) {
     amount, created_at: new Date(Date.now() + i).toISOString(), username: person.username, email: person.email };
 }
 const money = amount => new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
+const presentationNames = "Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)";
+async function viewsAgree(amount) {
+  const [names, ...amounts] = await Promise.all([
+    pages[0].page.evaluate(presentationNames),
+    ...pages.slice(1).map(({ page }) => page.evaluate(`document.body.innerText.includes(${JSON.stringify(money(amount))})`)),
+  ]);
+  return JSON.stringify(names) === JSON.stringify(rows().filter(row => row.is_winner).map(row => row.username)) && amounts.every(Boolean);
+}
+async function assertHiddenPresentationAmounts() {
+  assert(await pages[0].page.evaluate("!/[€]|\\bEUR\\b/.test(document.body.innerText) && document.querySelectorAll('ol[aria-label] li > strong').length === 0"), "live presentation must contain no currency values");
+}
+async function capturePresentation(label, width, height) {
+  const page = pages[0].page;
+  await page.call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 901 });
+  await pause(250);
+  const screenshot = await page.call("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  await writeFile(new URL(`../qa/presentation-winners-${label}.png`, import.meta.url), Buffer.from(screenshot.data, "base64"));
+  const layout = await page.evaluate("({width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight})");
+  assert(layout.scrollWidth <= width, "presentation must not overflow horizontally");
+  if (width > 900) assert(layout.scrollHeight <= height, "16:9 presentation must fit the viewport");
+  return layout;
+}
 
 try {
   await createPage("presentation", "/presentation");
@@ -261,6 +283,7 @@ try {
   await waitFor(async () => (await all("/\\blive\\b/i.test(document.body.innerText)")).every(Boolean), "all pages synchronized");
   await waitFor(async () => (await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("!!document.querySelector('#bid-amount') && !document.querySelector('#bid-amount').disabled")))).every(Boolean), "both bidder sessions ready");
   results.push({ scenario: "Four independent browser contexts load the same active auction and become live", passed: true });
+  await assertHiddenPresentationAmounts();
   if (batchedRealtime) {
     assert((await all("window.__qaRawBidSubscriptions() === 0")).every(Boolean));
     results.push({ scenario: "All four views use the shared private Broadcast with zero raw bid/name subscriptions", passed: true });
@@ -273,16 +296,17 @@ try {
   const burst = Array.from({ length: 1_000 }, (_, i) => bid(i));
   bids.push(...burst);
   const highest = money(1099);
-  await all(`window.__qaMark(${JSON.stringify(highest)})`);
+  await Promise.all(pages.map(({ page }, index) => page.evaluate(`window.__qaMark(${JSON.stringify(index === 0 ? rows()[0].username : highest)})`)));
   const events = [...burst].reverse().flatMap(record => [0, 1].map(() => ({ table: "bids", type: "INSERT", record })));
   await emit(events);
-  await waitFor(async () => (await all(`document.body.innerText.includes(${JSON.stringify(highest)})`)).every(Boolean), "burst visible during pending stale reads", 1_800);
+  await waitFor(() => viewsAgree(1099), "burst visible during pending stale reads", 1_800);
   const timing = await all("({deliveryMs:window.__qaDeliveryMs,visibleMs:window.__qaVisibleMs})");
   assert(timing.every(item => Number.isFinite(item.visibleMs) && item.visibleMs < 1_800), "all updates must precede stale snapshot completion");
   results.push({ scenario: "1,000 bids / 2,000 shuffled duplicated notifications per view appear before two-second stale snapshots finish", passed: true,
     timing: pages.map(({ name }, i) => ({ view: name, ...timing[i] })) });
   await pause(2_200);
-  assert((await all(`document.body.innerText.includes(${JSON.stringify(highest)})`)).every(Boolean));
+  assert(await viewsAgree(1099));
+  await assertHiddenPresentationAmounts();
   const presentation = pages[0].page;
   const admin = pages[1].page;
   const actualTop = await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)");
@@ -291,7 +315,7 @@ try {
   for (const { page } of pages.slice(2)) {
     assert.equal(await page.evaluate("Array.from(document.querySelectorAll('h2')).find(h=>h.textContent==='Leaderboard').closest('section').querySelectorAll('ol li').length"), 300);
   }
-  results.push({ scenario: "After stale responses: presentation Top 12, full 300-person bidder ranking and latest 500 admin history rows agree", passed: true });
+  results.push({ scenario: "After stale responses: presentation shows only 12 current winners without amounts; full 300-person bidder ranking and latest 500 admin history rows agree", passed: true });
 
   const beforeReads = adminReads;
   adminDelay = 600; dashboardDelay = 0;
@@ -301,12 +325,13 @@ try {
     await emit(group.map(record => ({ table: "bids", type: "INSERT", record })));
     await pause(50);
   }
-  await waitFor(async () => (await all(`document.body.innerText.includes(${JSON.stringify(money(2099))})`)).every(Boolean), "continuous traffic convergence");
+  await waitFor(() => viewsAgree(2099), "continuous traffic convergence");
   await pause(1_800);
   assert.equal(peakAdminReads, 1);
   assert.equal(await admin.evaluate("document.querySelector('aside ol').children.length"), 500);
   const winningNames = await admin.evaluate("Array.from(document.querySelectorAll('aside ol li')).filter(li=>li.innerText.includes('Winner #')).map(li=>li.querySelector('p span').textContent)");
   assert.deepEqual(winningNames.sort(), rows().slice(0, 12).map(row => row.username).sort());
+  await assertHiddenPresentationAmounts();
   results.push({ scenario: "Another 1,000 bids in a sustained stream: all views converge, no overlapping protected reads, same 12 winners", passed: true,
     protectedReads: adminReads - beforeReads, peakConcurrentReads: peakAdminReads });
 
@@ -341,20 +366,38 @@ try {
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
   results.push({ scenario: "Both real bidder forms accept identical €50 bids below the €500 opening price and leader; a €0.01 follow-up is also saved while personal bests and all rankings remain unchanged", passed: true });
   await submitFrom([pages[2]], 8000);
-  await waitFor(async () => (await all(`document.body.innerText.includes(${JSON.stringify(money(8000))})`)).every(Boolean), "bid above old maximum visible in all views");
+  await waitFor(() => viewsAgree(8000), "bid above old maximum visible in all views");
   assert.equal(submittedBids.at(-1).amount, 8000);
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
-  results.push({ scenario: "A real bidder form accepts €8,000 above the old maximum increase; all four views update to the new leader", passed: true });
+  await assertHiddenPresentationAmounts();
+  results.push({ scenario: "A real bidder form accepts €8,000 above the old maximum increase; all four views update to the new leader, presentation still hides amounts", passed: true });
   const missed = { ...bid(4_000, 9000), username: participants[100].username, participant_id: participants[100].id };
   bids.push(missed);
   await all("window.dispatchEvent(new Event('online'))");
-  await waitFor(async () => (await all(`document.body.innerText.includes(${JSON.stringify(money(9000))})`)).every(Boolean), "missed notification repaired by snapshots");
+  await waitFor(() => viewsAgree(9000), "missed notification repaired by snapshots");
   results.push({ scenario: "A missed live notification is repaired from the common server snapshot in all four views", passed: true });
 
+  auction.winner_count = 2;
+  await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
+  await waitFor(() => viewsAgree(9000), "presentation reduces to exactly two current winners");
+  assert.equal(await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length"), 2);
+  await assertHiddenPresentationAmounts();
+  const liveLayout = await capturePresentation("live-desktop", 1920, 1080);
+  results.push({ scenario: "Two winning places show exactly two names, with no remaining Top 10 rows or currency values", passed: true });
+
+  auction.timer_duration_seconds = 1;
+  await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
+  await waitFor(async () => await presentation.evaluate("document.body.innerText.includes('00:00')"), "visual timer elapsed");
+  await assertHiddenPresentationAmounts();
+  assert((await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("!document.querySelector('#bid-amount').disabled")))).every(Boolean));
+  results.push({ scenario: "Elapsed visual timer keeps amounts hidden and bidding open until the administrator ends the event", passed: true });
+
+  auction.timer_duration_seconds = 120;
   auction.winner_count = 15;
   await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
   await waitFor(async () => await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length===15"), "winner count update");
-  results.push({ scenario: "Realtime winner-count update expands presentation to Top 15", passed: true });
+  await assertHiddenPresentationAmounts();
+  results.push({ scenario: "Realtime winner-count update expands presentation to exactly 15 winners without amounts", passed: true });
   adminDelay = 2_000; dashboardDelay = 2_000;
   await all("window.dispatchEvent(new Event('online'))");
   await pause(200);
@@ -365,7 +408,12 @@ try {
   await pause(2_500);
   assert(await presentation.evaluate("document.body.innerText.includes('Final leaderboard')"));
   assert(await admin.evaluate("!Array.from(document.querySelectorAll('button')).some(button=>button.textContent==='End bidding')"));
-  results.push({ scenario: "Event end immediately disables both bidder forms and survives older active snapshots in all views", passed: true });
+  assert.deepEqual(await presentation.evaluate(presentationNames), rows().filter(row => row.is_winner).map(row => row.username));
+  assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li > strong')).map(element=>element.textContent)"), rows().filter(row => row.is_winner).map(row => money(row.amount)));
+  results.push({ scenario: "Event end reveals each winner's amount in the presentation leaderboard, disables both bidder forms and survives older active snapshots", passed: true });
+  const finalLayout = await capturePresentation("final-slide", 1280, 720);
+  const mobileLayout = await capturePresentation("final-mobile", 390, 844);
+  results.push({ scenario: "Live names and final amounts fit desktop, 16:9 slide and mobile layouts without horizontal overflow", passed: true, liveLayout, finalLayout, mobileLayout });
   // New-event forms must stay selected while unrelated live traffic keeps arriving.
   await admin.evaluate("Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Add event').click()");
   await emit([{ table: "bids", type: "INSERT", record: bid(2_001) }]);
