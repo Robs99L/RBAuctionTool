@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-13T15:41:17.184Z",
+  "mode": "Local demo and localStorage only; no production writes",
+  "results": [
+    {
+      "scenario": "Local registration opens the participant view and bid form",
+      "passed": true
+    },
+    {
+      "scenario": "Participant view contains no Activity or Recent bids section",
+      "passed": true
+    },
+    {
+      "scenario": "A lower €50 bid is accepted and saved; participant enters the ranking",
+      "passed": true
+    },
+    {
+      "scenario": "A €1,000 bid makes the participant the leader and updates the open presentation tab without showing amounts",
+      "passed": true
+    },
+    {
+      "scenario": "Admin demo displays the same participant and bid data",
+      "passed": true
+    },
+    {
+      "scenario": "Mobile participant view fits 390px width without horizontal overflow or an Activity section",
+      "passed": true
+    }
+  ],
+  "failures": []
+}

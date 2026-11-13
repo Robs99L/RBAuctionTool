@@ -26,7 +26,7 @@ import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { parseBidAmount } from "@/lib/bid-rules";
 import { browserDemoMode } from "@/lib/deployment-mode";
-import { formatMoney, formatTime } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { normalizeParticipantProfile } from "@/lib/participant-profile";
 import { continueParticipantAcrossLots } from "@/lib/participant-session";
 import {
@@ -154,7 +154,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   const queueSnapshotReadyRef = useRef(false);
   const auctionConnectedRef = useRef(false);
   const snapshotReadyAuctionIdRef = useRef<string | null>(null);
-  const { bids, leaderboard, participantCount } = liveState;
+  const { leaderboard, participantCount } = liveState;
   const auctionId = auction?.id;
   const shouldObserveLiveAuction = presentation || Boolean(participant) || auction?.status === "ended";
   const viewConnection = connection === "live" && shouldObserveLiveAuction && synchronizedAuctionId !== auctionId
@@ -720,7 +720,6 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
           key={auction.id}
           auction={auction}
           participant={participant}
-          bids={bids}
           leaderboard={leaderboard}
           connection={viewConnection}
           onPlaceBid={placeBid}
@@ -882,7 +881,6 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
           key={demoAuction.id}
           auction={demoAuction}
           participant={participant}
-          bids={demoBids}
           leaderboard={demoLeaderboard}
           connection="live"
           onPlaceBid={placeDemoBid}
@@ -1037,10 +1035,9 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
   );
 }
 
-function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPlaceBid, refreshDashboard }: {
+function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid, refreshDashboard }: {
   auction: Auction;
   participant: Participant | null;
-  bids: Bid[];
   leaderboard: LeaderboardEntry[];
   connection: ConnectionState;
   onPlaceBid: (amount: number) => Promise<BidReceipt>;
@@ -1214,37 +1211,6 @@ function AuctionRoom({ auction, participant, bids, leaderboard, connection, onPl
             ) : (
               <div className="rounded-xl border border-dashed border-ink/15 p-7 text-center text-sm text-ink/50">
                 The leaderboard will appear after the first accepted bid.
-              </div>
-            )}
-          </section>
-
-          <section className="panel order-4 p-5 sm:p-7 lg:order-none">
-            <div className="mb-5 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">Activity</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Recent bids</h2>
-              </div>
-              <span className="text-sm text-ink/45">Latest first</span>
-            </div>
-            {bids.length ? (
-              <ol className="divide-y divide-ink/10">
-                {bids.map((bid) => (
-                    <li key={bid.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 py-4 first:pt-1 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto] sm:gap-3">
-                      <span className="grid h-8 w-8 place-items-center rounded-full bg-ink/5 text-xs font-bold sm:h-9 sm:w-9">
-                        {bid.username.slice(0, 2).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{bid.username}</p>
-                        <p className="mt-0.5 text-xs text-ink/45">{formatTime(bid.created_at)}</p>
-                      </div>
-                      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(bid.amount, auction.currency)}</strong>
-                    </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-ink/15 px-5 py-10 text-center">
-                <p className="font-semibold">No bids yet</p>
-                <p className="mt-1 text-sm text-ink/50">Be the first to set the pace.</p>
               </div>
             )}
           </section>
