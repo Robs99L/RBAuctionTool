@@ -10,11 +10,27 @@ export function noStoreJson(body: unknown, init?: ResponseInit) {
   return response;
 }
 
+function netlifySiteOrigin() {
+  // Netlify provides SITE_ID and URL to Functions at runtime. Its Next.js
+  // adapter may retain an internal URL or the host of an earlier request.
+  // Trust this server configuration, never client-supplied forwarded headers.
+  if (!process.env.SITE_ID || !process.env.URL) return null;
+  try {
+    const siteUrl = new URL(process.env.URL);
+    if (siteUrl.protocol !== "https:" || siteUrl.username || siteUrl.password) return null;
+    return siteUrl.origin;
+  } catch {
+    return null;
+  }
+}
+
 export function isSameOriginRequest(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin) return process.env.NODE_ENV !== "production";
 
   try {
+    const browserUrl = new URL(origin);
+    if (!["http:", "https:"].includes(browserUrl.protocol) || browserUrl.origin !== origin) return false;
     const requestUrl = new URL(request.url);
     const host = request.headers.get("host");
     // Next's dev server can normalize 127.0.0.1 to localhost in request.url.
@@ -26,9 +42,11 @@ export function isSameOriginRequest(request: Request) {
     ) {
       const localUrl = new URL(`${requestUrl.protocol}//${host}`);
       if (localUrl.port !== requestUrl.port) return false;
-      return new URL(origin).origin === localUrl.origin;
+      return browserUrl.origin === localUrl.origin;
     }
-    return new URL(origin).origin === requestUrl.origin;
+    return browserUrl.origin === requestUrl.origin || (
+      process.env.NODE_ENV === "production" && browserUrl.origin === netlifySiteOrigin()
+    );
   } catch {
     return false;
   }

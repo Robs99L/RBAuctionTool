@@ -142,6 +142,8 @@ The repository includes [`netlify.toml`](netlify.toml) with `npm run build`, Nod
 
 In **Netlify → Site configuration → Environment variables**, configure the four required connection/admin variables above for the Production context (and Deploy Previews if needed). Set the optional batching switch only after database verification. Trigger a new deploy after changing environment variables. The application uses the hosted Supabase project in production and has no dependency on a local server or local database.
 
+Admin requests validate the browser's exact Origin against the request URL. On Netlify they also accept the main public site origin from Netlify's read-only runtime variables `SITE_ID` and `URL`, because the Next.js adapter can supply a different internal URL. No additional variable is required. Client-provided Host and forwarded headers do not authorize another origin; missing, malformed and foreign Origins remain rejected in production.
+
 For Supabase Auth, add the final Netlify domain under **Authentication → URL Configuration**. Anonymous sign-in itself does not redirect, but setting the project site URL now avoids surprises if other providers are added later.
 
 ## Security and production limitations

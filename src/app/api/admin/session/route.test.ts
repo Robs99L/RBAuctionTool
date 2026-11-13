@@ -22,6 +22,8 @@ import { POST } from "./route";
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("NODE_ENV", "development");
+  vi.stubEnv("SITE_ID", undefined);
+  vi.stubEnv("URL", undefined);
   mocks.configured.mockReturnValue(true);
   mocks.validSecret.mockImplementation((secret: string) => secret === "valid-test-secret");
   mocks.rpc.mockResolvedValue({ data: [{ allowed: true }], error: null });
@@ -72,5 +74,42 @@ describe("admin login input", () => {
     expect(response.headers.get("set-cookie")).toMatch(/auction_admin=signed-test-session/);
     expect(response.headers.get("set-cookie")).toMatch(/HttpOnly/);
     expect(response.headers.get("set-cookie")).toMatch(/SameSite=strict/i);
+  });
+
+  it("accepts the public Netlify origin behind the adapter and issues a secure session", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SITE_ID", "trusted-netlify-site");
+    vi.stubEnv("URL", "https://rbchristmasauction.netlify.app");
+    const input = new Request("http://localhost:443/api/admin/session", {
+      method: "POST",
+      headers: { Origin: "https://rbchristmasauction.netlify.app", "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: "valid-test-secret" }),
+    });
+    const response = await POST(input);
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith("consume_admin_login_attempt", expect.objectContaining({ p_succeeded: true }));
+    expect(response.headers.get("set-cookie")).toMatch(/HttpOnly/);
+    expect(response.headers.get("set-cookie")).toMatch(/; Secure/);
+    expect(response.headers.get("set-cookie")).toMatch(/SameSite=strict/i);
+  });
+
+  it("rejects foreign Netlify login origins before validating the secret or accessing Supabase", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SITE_ID", "trusted-netlify-site");
+    vi.stubEnv("URL", "https://rbchristmasauction.netlify.app");
+    const input = new Request("http://localhost:443/api/admin/session", {
+      method: "POST",
+      headers: {
+        Origin: "https://untrusted.example", Host: "untrusted.example",
+        "x-forwarded-host": "untrusted.example", "x-forwarded-proto": "https",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ secret: "valid-test-secret" }),
+    });
+    const response = await POST(input);
+    expect(response.status).toBe(403);
+    expect(mocks.validSecret).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 });

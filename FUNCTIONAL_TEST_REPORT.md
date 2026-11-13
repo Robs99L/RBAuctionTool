@@ -1,6 +1,16 @@
 # Funktionstest und Fehlerkorrekturen des Auktionstools
 
-Stand: 12. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
+Stand: 13. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
+
+## Adminanmeldung auf Netlify
+
+Der Origin-Fehler wurde am 13. November auf `https://rbchristmasauction.netlify.app/api/admin/session` mit einem numerischen Secret reproduziert: Die sichere Testeingabe wurde bereits mit HTTP 403 zurückgewiesen, bevor die Eingabeprüfung oder ein Datenbankzugriff stattfinden konnte. Die Anwendung verglich ausschließlich mit der von Next.js rekonstruierten Request-URL. Diese kann hinter dem Netlify-Adapter von der öffentlichen Browseradresse abweichen.
+
+Die gemeinsame Origin-Prüfung berücksichtigt jetzt zusätzlich die öffentliche Hauptadresse aus Netlifys schreibgeschützten Laufzeitvariablen `SITE_ID` und `URL`. Das gilt für Anmeldung, Abmeldung und die geschützten Adminaktionen. Browserseitig übermittelte Host-/Weiterleitungsheader erweitern die erlaubten Origins nicht. Fehlender Origin, fremde Domains, abweichendes Protokoll beziehungsweise Port und nicht korrekt serialisierte Origins bleiben gesperrt.
+
+Regressionsprüfungen decken interne HTTP-Adressen, einen abweichenden Deploymenthost, gültige öffentliche Anmeldung mit sicherem Cookie, manipulierte Header und fehlende beziehungsweise ungültige Serverkonfiguration ab. Alle 167 Tests in 23 Dateien sowie TypeScript, ESLint und der isolierte Produktionsbuild sind bestanden. Die gebaute API akzeptiert die öffentliche Netlify-Origin und erreicht mit numerischem Secret die erwartete Eingabeprüfung (HTTP 400); fremde, fehlende oder im Protokoll abweichende Origins bleiben HTTP 403. Eine Adminaktion mit gültiger Origin ohne Sitzung wird weiterhin HTTP 401 abgewiesen.
+
+Nachweis: [Produktions-API hinter simulierter Netlify-Adresse](qa/netlify-admin-origin-results.json). Für die Anmeldeprüfung werden Secretvalidierung und Supabase-Ratelimiter simuliert; es werden keine echten produktiven Anmeldeversuche oder Auktionstransaktionen erzeugt. Die isolierte Produktions-API wird ausschließlich mit Eingaben geprüft, die vor einem Datenbankzugriff abgewiesen werden. Die folgenden Abschnitte dokumentieren frühere Prüfstände.
 
 ## Datenbankseitig gebündelte Live-Updates
 

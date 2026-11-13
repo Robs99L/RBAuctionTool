@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-13T10:23:17.049Z",
+  "mode": "Isolated production build with trusted Netlify SITE_ID/URL; invalid inputs or unauthenticated requests only, no database changes",
+  "results": [
+    {
+      "name": "Configured Netlify Origin passes behind an internal HTTP URL",
+      "path": "/api/admin/session",
+      "origin": "https://rbchristmasauction.netlify.app",
+      "expected": 400,
+      "status": 400,
+      "body": {
+        "error": "A text administrator secret is required."
+      },
+      "passed": true
+    },
+    {
+      "name": "Foreign Origin remains blocked",
+      "path": "/api/admin/session",
+      "origin": "https://untrusted.example",
+      "expected": 403,
+      "status": 403,
+      "body": {
+        "error": "Cross-origin request rejected."
+      },
+      "passed": true
+    },
+    {
+      "name": "Wrong protocol remains blocked",
+      "path": "/api/admin/session",
+      "origin": "http://rbchristmasauction.netlify.app",
+      "expected": 403,
+      "status": 403,
+      "body": {
+        "error": "Cross-origin request rejected."
+      },
+      "passed": true
+    },
+    {
+      "name": "Missing Origin remains blocked",
+      "path": "/api/admin/session",
+      "expected": 403,
+      "status": 403,
+      "body": {
+        "error": "Cross-origin request rejected."
+      },
+      "passed": true
+    },
+    {
+      "name": "Admin action accepts public Origin then requires authentication",
+      "path": "/api/admin/auction",
+      "origin": "https://rbchristmasauction.netlify.app",
+      "expected": 401,
+      "status": 401,
+      "body": {
+        "error": "Administrator authorization required."
+      },
+      "passed": true
+    }
+  ]
+}
