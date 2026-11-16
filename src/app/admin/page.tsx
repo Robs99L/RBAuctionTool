@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdminPanel } from "@/components/admin-panel";
+import { OnlineCount } from "@/components/online-count";
 import { RbLogo } from "@/components/rb-logo";
 
 export const metadata = { title: "Administration | Christmas Auction" };
@@ -17,6 +18,7 @@ export default function AdminPage() {
             </span>
           </Link>
           <nav className="flex flex-wrap items-center gap-4" aria-label="Auction views">
+            <OnlineCount />
             <Link className="text-link" href="/">View auction</Link>
             <Link className="btn-secondary gap-2" href="/presentation" target="_blank" rel="noopener noreferrer">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">

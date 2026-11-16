@@ -62,6 +62,7 @@
 
 .brand { gap: 18px; color: var(--presentation-green); font-size: clamp(20px, 1.7vw, 32px); }
 .controls { display: flex; align-items: center; gap: 24px; }
+.onlineCount { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dce7dd; border-radius: 999px; background: #f0f6ef; padding: 8px 12px; color: var(--presentation-green); font-size: 16px; font-weight: 700; white-space: nowrap; }
 .connection { display: inline-flex; align-items: center; gap: 10px; border: 1px solid #dce7dd; border-radius: 999px; background: #f0f6ef; padding: 8px 14px; color: var(--presentation-green); font-size: 16px; font-weight: 700; }
 .connection:has(.offlineDot) { border-color: #e7d4a4; background: #faf0d9; color: #7d5918; }
 .liveDot, .offlineDot { width: 9px; height: 9px; border-radius: 50%; background: #25804d; box-shadow: 0 0 0 4px #25804d12; }
@@ -200,6 +201,7 @@
   .brand > :first-child { width: 90px; height: 36px; }
   .controls { gap: 8px; }
   .connection { padding: 4px 8px; font-size: 12px; }
+  .onlineCount { padding: 4px 8px; font-size: 12px; }
   .fullscreenButton { min-height: 32px; padding: 4px 8px; gap: 6px; font-size: 12px; }
   .content { gap: 24px; padding: 24px 12px 12px; }
   .eventDetails { padding: 8px 12px; }
@@ -255,6 +257,7 @@
   .brand > :first-child { width: 64px; height: 30px; }
   .controls { gap: 6px; }
   .connection { gap: 6px; padding: 4px 6px; font-size: 10px; }
+  .onlineCount { gap: 4px; padding: 4px 6px; font-size: 10px; }
   .fullscreenButton { padding: 4px 6px; }
   .fullscreenLabel { display: none; }
 }

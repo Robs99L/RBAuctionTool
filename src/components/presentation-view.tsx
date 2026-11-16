@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
+import { OnlineCount } from "@/components/online-count";
 import { RbLogo } from "@/components/rb-logo";
 import { formatMoney } from "@/lib/format";
 import type { Auction, LeaderboardEntry } from "@/lib/types";
@@ -63,6 +64,7 @@ export function PresentationView({
           <span>Christmas Auction</span>
         </div>
         <div className={styles.controls}>
+          <OnlineCount demo={demo} className={styles.onlineCount} />
           <span className={styles.connection} role="status">
             <span className={connection === "live" && !error ? styles.liveDot : styles.offlineDot} aria-hidden="true" />
             {demo ? "Local demo" : error || connection === "offline" ? "Reconnecting" : connection === "live" ? "Live" : "Connecting"}

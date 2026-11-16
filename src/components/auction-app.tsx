@@ -22,6 +22,7 @@ import { subscribeAuctionBatches, usesAuctionBroadcast } from "@/lib/auction-bro
 import { applyAuctionQueueEvent, selectNextAuction, selectParticipantAuction, type AuctionQueueEvent } from "@/lib/auction-queue";
 import { getAuctionNow } from "@/lib/auction-clock";
 import { useAuctionClock } from "@/lib/use-auction-clock";
+import { useTrackOnline } from "@/lib/use-online-count";
 import { remainingAuctionStartSeconds } from "@/lib/auction-timer";
 import { selectWinningBids } from "@/lib/auction-winners";
 import { parseBidAmount } from "@/lib/bid-rules";
@@ -82,6 +83,8 @@ function auctionError(error: unknown, fallback: string) {
     "Registration is closed because this auction has ended.",
     "Enter a valid bid with no more than two decimal places.",
     "Please wait a moment before placing another bid.",
+    "Join the auction before placing a bid.",
+    "Your session has expired. Please rejoin the auction.",
   ];
   const known = knownMessages.find((candidate) => message.includes(candidate));
   if (known) return known;
@@ -123,6 +126,7 @@ function useBiddingOpen(status: AuctionStatus, startsAt: string | null) {
 export function AuctionApp({ presentation = false }: { presentation?: boolean }) {
   const configured = hasSupabaseBrowserConfig();
   const demoMode = browserDemoMode(configured);
+  useTrackOnline(demoMode);
   const client = useMemo(
     () => (configured && !demoMode ? getSupabaseBrowserClient() : null),
     [configured, demoMode],
@@ -130,6 +134,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [auction, setAuction] = useState<Auction | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
+  const [rejoinRequested, setRejoinRequested] = useState(false);
   const [liveState, setLiveState] = useState(emptyAuctionLiveState);
   const [loading, setLoading] = useState(configured && !demoMode);
   const [restoredAuctionId, setRestoredAuctionId] = useState<string | null>(null);
@@ -371,7 +376,14 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
       p_auction_id: auctionId,
       p_amount: amount,
     });
-    if (bidError) throw new Error(auctionError(bidError, "Your bid could not be accepted."));
+    if (bidError) {
+      if (
+        bidError.message.includes("Join the auction before placing a bid.") ||
+        bidError.message.includes("Your session has expired.") ||
+        bidError.code === "PGRST301" || bidError.code === "PGRST303"
+      ) setParticipant(null);
+      throw new Error(auctionError(bidError, "Your bid could not be accepted."));
+    }
     const receipt = data?.[0];
     if (!receipt) throw new Error("The accepted bid receipt is unavailable.");
     const normalizedReceipt = {
@@ -395,6 +407,14 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
     }
     return normalizedReceipt;
   }, [auctionId, client, handleLiveEvent, participant]);
+
+  useEffect(() => {
+    if (!client || presentation) return;
+    const { data } = client.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") setParticipant(null);
+    });
+    return () => data.subscription.unsubscribe();
+  }, [client, presentation]);
 
   useEffect(() => {
     if (!client) return;
@@ -715,7 +735,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   return (
     <main className="min-h-screen bg-cream">
       <Header connection={viewConnection} participantCount={participantCount} />
-      {participant || effectiveStatus(auction) === "ended" ? (
+      {participant || (!rejoinRequested && effectiveStatus(auction) === "ended") ? (
         <AuctionRoom
           key={auction.id}
           auction={auction}
@@ -724,12 +744,16 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
           connection={viewConnection}
           onPlaceBid={placeBid}
           refreshDashboard={refreshDashboard}
+          onRejoin={() => setRejoinRequested(true)}
         />
       ) : (
         <JoinExperience
           auction={auction}
           nextEventName={nextAuction?.title ?? null}
-          onJoined={setParticipant}
+          onJoined={(joinedParticipant) => {
+            setParticipant(joinedParticipant);
+            setRejoinRequested(false);
+          }}
           onJoin={joinAuction}
         />
       )}
@@ -740,6 +764,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
 function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
   const [demoState, setDemoState] = useState<DemoAuctionState | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
+  const [rejoinRequested, setRejoinRequested] = useState(false);
   const demoAuction = useMemo(
     () => demoState ? selectParticipantAuction(demoState.auctions) : null,
     [demoState],
@@ -803,10 +828,19 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
 
   const joinDemo = useCallback(async (username: string, email: string) => {
     if (!demoState || !demoAuction) throw new Error("The demo is still loading.");
-    const nameTaken = demoState.participants.some(
+    const existingParticipant = demoState.participants.find(
       (item) => item.username.toLocaleLowerCase() === username.toLocaleLowerCase(),
     );
-    if (nameTaken) throw new Error("This name is already in use.");
+    if (existingParticipant) {
+      if (existingParticipant.email?.trim().toLowerCase() !== email.trim().toLowerCase()) {
+        throw new Error("This name is already in use. Use the same name and email as your original registration to rejoin.");
+      }
+      saveDemoParticipantId(existingParticipant.id);
+      return { ...existingParticipant, auction_id: demoAuction.id };
+    }
+    if (effectiveStatus(demoAuction) === "ended") {
+      throw new Error("Registration is closed because this auction has ended.");
+    }
 
     const nextParticipant: Participant = {
       id: crypto.randomUUID(),
@@ -876,7 +910,7 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
         </div>
       </div>
       <Header connection="live" participantCount={demoParticipants.length} />
-      {participant || effectiveStatus(demoAuction) === "ended" ? (
+      {participant || (!rejoinRequested && effectiveStatus(demoAuction) === "ended") ? (
         <AuctionRoom
           key={demoAuction.id}
           auction={demoAuction}
@@ -885,12 +919,16 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
           connection="live"
           onPlaceBid={placeDemoBid}
           refreshDashboard={async () => undefined}
+          onRejoin={() => setRejoinRequested(true)}
         />
       ) : (
         <JoinExperience
           auction={demoAuction}
           nextEventName={demoNextAuction?.title ?? null}
-          onJoined={setParticipant}
+          onJoined={(joinedParticipant) => {
+            setParticipant(joinedParticipant);
+            setRejoinRequested(false);
+          }}
           onJoin={joinDemo}
         />
       )}
@@ -977,9 +1015,16 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
       <section className="flex min-w-0 items-center px-5 py-8 sm:px-12 sm:py-10 lg:px-16">
         <div className="w-full max-w-lg">
           <h2 className="break-words text-3xl font-semibold sm:text-4xl">Welcome to the OPS/IND Christmas Auction</h2>
-          <p className="mt-3 text-lg font-semibold text-forest">Join the bidding.</p>
+          <p className="mt-3 text-lg font-semibold text-forest">
+            {auction.status === "ended" ? "Rejoin to see your result." : "Join the bidding."}
+          </p>
           <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
-            Register with your name and email. You stay in the auction automatically when the next bidding round starts.
+            {auction.status === "ended"
+              ? "This auction has ended. Existing participants can rejoin with their original name and email."
+              : "Register with your name and email. You stay in the auction automatically when the next bidding round starts."}
+          </p>
+          <p className="mt-3 max-w-md text-sm leading-6 text-ink/60">
+            Lost your session? Enter the same name and email to rejoin. Your existing bids and rank are kept.
           </p>
           <AuctionTimer
             startsAt={auction.starts_at}
@@ -1022,7 +1067,7 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
               />
             </div>
             <button className="btn-primary w-full" disabled={submitting}>
-              {submitting ? "Joining…" : "Register for auction"}
+              {submitting ? "Joining…" : auction.status === "ended" ? "Rejoin auction" : "Join or rejoin auction"}
             </button>
             {message && <div className="notice notice-error mt-3" role="alert">{message}</div>}
           </form>
@@ -1035,13 +1080,14 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
   );
 }
 
-function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid, refreshDashboard }: {
+function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid, refreshDashboard, onRejoin }: {
   auction: Auction;
   participant: Participant | null;
   leaderboard: LeaderboardEntry[];
   connection: ConnectionState;
   onPlaceBid: (amount: number) => Promise<BidReceipt>;
   refreshDashboard: () => Promise<void>;
+  onRejoin?: () => void;
 }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -1281,6 +1327,11 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 <p className="text-xs font-bold uppercase tracking-[.13em] text-ink/45">Bidding closed</p>
                 <h2 className="mt-2 text-xl font-semibold">Final results are available above.</h2>
                 <p className="mt-2 text-sm leading-6 text-ink/55">No registration is required to view the completed auction.</p>
+                {onRejoin && (
+                  <button type="button" className="btn-primary mt-5 w-full" onClick={onRejoin}>
+                    Rejoin to see your result
+                  </button>
+                )}
               </div>
             )}
           </section>

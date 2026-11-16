@@ -112,8 +112,14 @@ function installFixtures(config) {
       const [join, ref, topic, event, payload] = JSON.parse(raw);
       if (event === "phx_join") {
         const bindings = (payload.config?.postgres_changes || []).map((binding, i) => ({ ...binding, id: i + 1 }));
-        this.channels.set(topic, { join, bindings });
+        this.channels.set(topic, { join, bindings, presenceKey: payload.config?.presence?.key });
         setTimeout(() => this.message([join, ref, topic, "phx_reply", { status: "ok", response: { postgres_changes: bindings } }]), 0);
+      } else if (event === "presence" && payload.event === "track") {
+        const channel = this.channels.get(topic);
+        setTimeout(() => {
+          this.message([join, ref, topic, "phx_reply", { status: "ok", response: {} }]);
+          this.message([join, null, topic, "presence_state", { [channel.presenceKey]: { metas: [{ phx_ref: crypto.randomUUID(), ...payload.payload }] } }]);
+        }, 0);
       } else if (event === "heartbeat" || event === "phx_leave") {
         if (event === "phx_leave") this.channels.delete(topic);
         setTimeout(() => this.message([join, ref, topic, "phx_reply", { status: "ok", response: {} }]), 0);
@@ -123,6 +129,16 @@ function installFixtures(config) {
   }
   window.WebSocket = FixtureSocket;
   window.__qaSockets = () => sockets.map(socket => ({ state: socket.readyState, channels: [...socket.channels.keys()] }));
+  window.__qaPresenceState = state => {
+    for (const socket of sockets) for (const [topic, channel] of socket.channels) {
+      if (topic === 'realtime:auction-online' && socket.readyState === 1) socket.message([channel.join, null, topic, 'presence_state', state]);
+    }
+  };
+  window.__qaPresenceDisconnect = () => {
+    for (const socket of sockets) for (const [topic, channel] of socket.channels) {
+      if (topic === 'realtime:auction-online' && socket.readyState === 1) socket.message([channel.join, null, topic, 'phx_error', {}]);
+    }
+  };
   window.__qaRawBidSubscriptions = () => sockets.filter(socket => socket.readyState === 1)
     .flatMap(socket => [...socket.channels.values()]).flatMap(channel => channel.bindings)
     .filter(binding => binding.table === 'bids' || binding.table === 'participants').length;
@@ -467,6 +483,44 @@ try {
   await pause(1_500);
   assert(await admin.evaluate("!document.body.innerText.includes('Edit event')"));
   results.push({ scenario: "An unsaved new-event form remains selected during unrelated live traffic", passed: true });
+  await waitFor(async () => (await all("localStorage.getItem('rb-auction-online-browser')")).every(Boolean), "all views track an opaque browser key");
+  const presenceKeys = await all("localStorage.getItem('rb-auction-online-browser')");
+  assert.equal(new Set(presenceKeys).size, 4);
+  assert((await all("window.__qaSockets().flatMap(socket=>socket.channels).filter(topic=>topic==='realtime:auction-online').length===1")).every(Boolean), "each tab must share one presence subscription");
+  async function publishPresence(keys, duplicate = false) {
+    const state = Object.fromEntries(keys.map((key, i) => [key, { metas: [
+      { phx_ref: key + '-first', online: true },
+      ...(duplicate && i === 0 ? [{ phx_ref: key + '-second', online: true }] : []),
+    ] }]));
+    await all(`window.__qaPresenceState(${JSON.stringify(state)})`);
+  }
+  async function countersAgree(count) {
+    return (await Promise.all([presentation, admin].map(page => page.evaluate(`document.querySelector('[data-online-count]')?.getAttribute('data-online-count')===${JSON.stringify(String(count))}`)))).every(Boolean);
+  }
+  await publishPresence(presenceKeys, true);
+  await waitFor(() => countersAgree(4), "both counters show four browsers, including two tabs under one key");
+  results.push({ scenario: "Administration and presentation show four browsers, with one shared presence channel per tab and duplicate tab metadata counted once", passed: true });
+  await publishPresence(presenceKeys.slice(0, 3));
+  await waitFor(() => countersAgree(3), "departures update both counters");
+  results.push({ scenario: "A departed browser immediately reduces both online counters", passed: true });
+  await Promise.all([presentation, admin].map(page => page.evaluate("window.__qaPresenceDisconnect()")));
+  await waitFor(() => countersAgree("unavailable"), "disconnected counters discard stale numbers");
+  await waitFor(async () => (await Promise.all([presentation, admin].map(page => page.evaluate("document.querySelector('[data-online-count]')?.getAttribute('data-online-count')==='1'")))).every(Boolean), "presence automatically reconnects");
+  await publishPresence(presenceKeys);
+  await waitFor(() => countersAgree(4), "both counters recover after rejoining");
+  results.push({ scenario: "Connection loss displays an unavailable counter; automatic rejoin restores the current total", passed: true });
+  const visitor = await createPage("visitor", "/");
+  await waitFor(async () => await visitor.evaluate("Boolean(localStorage.getItem('rb-auction-online-browser'))"), "unregistered visitor tracks presence");
+  const visitorKey = await visitor.evaluate("localStorage.getItem('rb-auction-online-browser')");
+  assert(await visitor.evaluate(`localStorage.getItem(${JSON.stringify(storageKey)})===null`));
+  await publishPresence([...presenceKeys, visitorKey]);
+  await waitFor(() => countersAgree(5), "unregistered visitor included in both counters");
+  results.push({ scenario: "An unregistered visitor without an Auth session also contributes to the online total", passed: true });
+  await capturePresentation("online-mobile", 375, 667);
+  const preview = await createPage("preview", "/presentation?demo=true&winners=2");
+  await waitFor(async () => await preview.evaluate("document.querySelector('[data-online-count]')?.getAttribute('data-online-count')==='1'"), "standalone preview uses the local browser count");
+  assert(await preview.evaluate("window.__qaSockets().length===0"), "standalone preview must not connect to Supabase");
+  results.push({ scenario: "The standalone demo shows its one local browser and makes no Supabase connections; the mobile online counter fits", passed: true });
   assert.equal(failures.length, 0, JSON.stringify(failures));
 } catch (error) {
   failures.push({ error: error.stack ?? error.message });

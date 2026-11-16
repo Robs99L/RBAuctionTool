@@ -1,0 +1,59 @@
+{
+  "date": "2026-11-16T22:26:19.361Z",
+  "mode": "Isolated local HTTP/Realtime fixtures; no hosted writes or emails",
+  "results": [
+    {
+      "scenario": "Lost Auth storage is rejoined",
+      "passed": true,
+      "checks": [
+        "wrong email rejected",
+        "same original participant and bid",
+        "new bids use original participant",
+        "second session loss returns registration and can rejoin",
+        "Auth sign-out returns registration and creates a new session on rejoin",
+        "amounts and recent activities remain hidden",
+        "no horizontal mobile overflow",
+        "no email requests"
+      ]
+    },
+    {
+      "scenario": "Rejoin after event end (lost storage)",
+      "passed": true,
+      "checks": [
+        "public final results remain accessible",
+        "existing participant can rejoin",
+        "personal winner result and final EUR amount appear",
+        "bidding stays disabled",
+        "existing bids unchanged",
+        "no email requests"
+      ]
+    },
+    {
+      "scenario": "Invalid stored session is cleared and rejoined",
+      "passed": true,
+      "checks": [
+        "wrong email rejected",
+        "same original participant and bid",
+        "new bids use original participant",
+        "second session loss returns registration and can rejoin",
+        "Auth sign-out returns registration and creates a new session on rejoin",
+        "amounts and recent activities remain hidden",
+        "no horizontal mobile overflow",
+        "no email requests"
+      ]
+    },
+    {
+      "scenario": "Rejoin after event end (invalid session)",
+      "passed": true,
+      "checks": [
+        "public final results remain accessible",
+        "existing participant can rejoin",
+        "personal winner result and final EUR amount appear",
+        "bidding stays disabled",
+        "existing bids unchanged",
+        "no email requests"
+      ]
+    }
+  ],
+  "failures": []
+}

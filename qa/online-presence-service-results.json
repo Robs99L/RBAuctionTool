@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-16T21:59:05.123Z",
+  "mode": "Real hosted Presence in an isolated temporary topic; no Auth or database writes",
+  "results": [
+    {
+      "scenario": "Three real connections with two browser keys produce an online count of two",
+      "passed": true
+    },
+    {
+      "scenario": "Closing one of two tabs keeps the browser online",
+      "passed": true
+    },
+    {
+      "scenario": "Closing the last tab removes that browser from the online count",
+      "passed": true
+    }
+  ]
+}
