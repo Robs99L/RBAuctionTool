@@ -1,5 +1,11 @@
 # Funktionstest und Fehlerkorrekturen des Auktionstools
 
+## Öffentliche Beträge erst nach Auktionsende
+
+Stand: 16. November 2026. Präsentation und Teilnehmeransicht verbergen Geldbeträge während der Auktion. Nach dem manuellen Auktionsende zeigt die Präsentation die Gewinnerbeträge; die Teilnehmeransicht zeigt die finalen Gebotsbeträge im Leaderboard, beim finalen Höchstgebot und im persönlichen Ergebnisdialog. Startpreis, Währungslabel am Eingabefeld und Beträge in Gebotsbestätigungen bleiben entfernt. „Recent activities“ ist in der Teilnehmeransicht nicht vorhanden. Die Adminansicht zeigt Gebotsbeträge und Spendensummen durchgehend. Ein abgelaufener Anzeigetimer allein blendet keine öffentlichen Beträge ein.
+
+TypeScript, ESLint, Produktionsbuild und 14 Browserszenarien mit zwei Teilnehmern, Admin und Präsentation sind bestanden. Geprüft wurden unter anderem Gebotseingabe ohne öffentliche Beträge, Live-Aktualisierungen, verzögerte Antworten, Beträge nach Auktionsende einschließlich persönlicher Ergebnisdialoge sowie Desktop- und Mobilansichten. Alle HTTP- und Realtime-Testdaten wurden lokal simuliert; es gab keine produktiven Gebote oder Eventänderungen. Nachweis: [Browserprüfung](qa/public-amount-visibility-results.json). Die folgenden Abschnitte dokumentieren frühere Prüfstände.
+
 Stand: 13. November 2026. Geprüft wurde der aktuelle lokale Projektstand mit Next.js 16.4.2 und Microsoft Edge. Gebuchte Tarife laut Nutzer: Netlify Free und Supabase Free.
 
 ## Präsentation mit Gewinnernamen und späteren Beträgen

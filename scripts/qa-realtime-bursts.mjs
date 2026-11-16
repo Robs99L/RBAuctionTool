@@ -254,14 +254,22 @@ function bid(i, amount = i + 100) {
 const money = amount => new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
 const presentationNames = "Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)";
 async function viewsAgree(amount) {
-  const [names, ...amounts] = await Promise.all([
+  const [names, adminHasAmount, ...participantNames] = await Promise.all([
     pages[0].page.evaluate(presentationNames),
-    ...pages.slice(1).map(({ page }) => page.evaluate(`document.body.innerText.includes(${JSON.stringify(money(amount))})`)),
+    pages[1].page.evaluate(`document.body.innerText.includes(${JSON.stringify(money(amount))})`),
+    ...pages.slice(2).map(({ page }) => page.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li div > p')).map(element=>element.textContent)")),
   ]);
-  return JSON.stringify(names) === JSON.stringify(rows().filter(row => row.is_winner).map(row => row.username)) && amounts.every(Boolean);
+  return JSON.stringify(names) === JSON.stringify(rows().filter(row => row.is_winner).map(row => row.username))
+    && adminHasAmount
+    && participantNames.every(names => JSON.stringify(names) === JSON.stringify(rows().map(row => row.username)));
 }
 async function assertHiddenPresentationAmounts() {
-  assert(await pages[0].page.evaluate("!/[€]|\\bEUR\\b/.test(document.body.innerText) && document.querySelectorAll('ol[aria-label] li > strong').length === 0"), "live presentation must contain no currency values");
+  for (const { name, page } of [pages[0], ...pages.slice(2)]) {
+    assert(await page.evaluate("!/[€]|\\bEUR\\b/.test(document.body.innerText) && document.querySelectorAll('ol[aria-label] li > strong').length === 0"), `${name} must contain no currency values before event end`);
+  }
+  for (const { page } of pages.slice(2)) {
+    assert(await page.evaluate("!/recent activit/i.test(document.body.innerText)"), "participants must have no recent activity feed");
+  }
 }
 async function assertAdminRanking() {
   const actual = await pages[1].page.evaluate("Array.from(document.querySelectorAll('ol[aria-label=\"Bid ranking\"] li')).map(row => ({rank:Number(row.querySelector(':scope > span').textContent),name:row.querySelector('p span').textContent,amount:row.querySelector(':scope > strong').textContent,bidTime:row.querySelector('time').getAttribute('datetime')}))");
@@ -300,7 +308,7 @@ try {
   const burst = Array.from({ length: 1_000 }, (_, i) => bid(i));
   bids.push(...burst);
   const highest = money(1099);
-  await Promise.all(pages.map(({ page }, index) => page.evaluate(`window.__qaMark(${JSON.stringify(index === 0 ? rows()[0].username : highest)})`)));
+  await Promise.all(pages.map(({ page }, index) => page.evaluate(`window.__qaMark(${JSON.stringify(index === 1 ? highest : rows()[0].username)})`)));
   const events = [...burst].reverse().flatMap(record => [0, 1].map(() => ({ table: "bids", type: "INSERT", record })));
   await emit(events);
   await waitFor(() => viewsAgree(1099), "burst visible during pending stale reads", 1_800);
@@ -354,13 +362,16 @@ try {
   adminDelay = 0;
   const beforeLower = rows().map(row => ({ id: row.bid_id, amount: row.amount }));
   async function submitFrom(contexts, amount) {
+    const beforeSubmissions = submittedBids.length;
     await Promise.all(contexts.map(({ page }) => page.evaluate(`(() => {
       const input = document.querySelector('#bid-amount');
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(String(amount))});
       input.dispatchEvent(new Event('input', { bubbles: true }));
     })()`)));
     await Promise.all(contexts.map(({ page }) => page.evaluate("document.querySelector('#bid-amount').closest('form').requestSubmit()")));
-    await waitFor(async () => (await Promise.all(contexts.map(({ page }) => page.evaluate(`document.body.innerText.includes(${JSON.stringify(`Bid accepted at ${money(amount)}.`)})`)))).every(Boolean), "bid receipts");
+    await waitFor(async () => submittedBids.length === beforeSubmissions + contexts.length
+      && (await Promise.all(contexts.map(({ page }) => page.evaluate("document.body.innerText.includes('Your bid has been accepted.')")))).every(Boolean), "bid receipts without monetary amounts");
+    await assertHiddenPresentationAmounts();
   }
   await submitFrom(pages.slice(2), 50);
   await submitFrom([pages[2]], 0.01);
@@ -414,10 +425,17 @@ try {
   assert(await admin.evaluate("!Array.from(document.querySelectorAll('button')).some(button=>button.textContent==='End bidding')"));
   assert.deepEqual(await presentation.evaluate(presentationNames), rows().filter(row => row.is_winner).map(row => row.username));
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li > strong')).map(element=>element.textContent)"), rows().filter(row => row.is_winner).map(row => money(row.amount)));
-  results.push({ scenario: "Event end reveals each winner's amount in the presentation leaderboard, disables both bidder forms and survives older active snapshots", passed: true });
+  await assertAdminRanking();
+  await waitFor(async () => (await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("Boolean(document.querySelector('[role=dialog]'))")))).every(Boolean), "participant result dialogs after authoritative final snapshots");
+  for (const { page } of pages.slice(2)) {
+    assert.deepEqual(await page.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li > strong')).map(element=>element.textContent)"), rows().map(row => money(row.amount)));
+    assert(await page.evaluate("/[€]|\\bEUR\\b/.test(document.querySelector('[role=dialog]').innerText)"), "personal final result must reveal the bid amount");
+    assert(await page.evaluate("!/recent activit/i.test(document.body.innerText)"), "recent activities must remain absent after auction end");
+  }
+  results.push({ scenario: "Event end reveals the correct EUR amounts in public rankings and participant result dialogs, preserves admin amounts, disables bidding and survives older active snapshots", passed: true });
   const finalLayout = await capturePresentation("final-slide", 1280, 720);
   const mobileLayout = await capturePresentation("final-mobile", 390, 844);
-  results.push({ scenario: "Live names and final amounts fit desktop, 16:9 slide and mobile layouts without horizontal overflow", passed: true, liveLayout, finalLayout, mobileLayout });
+  results.push({ scenario: "Live winner names and final amounts fit desktop, 16:9 slide and mobile layouts without horizontal overflow", passed: true, liveLayout, finalLayout, mobileLayout });
   // New-event forms must stay selected while unrelated live traffic keeps arriving.
   await admin.evaluate("Array.from(document.querySelectorAll('button')).find(button=>button.textContent==='Add event').click()");
   await emit([{ table: "bids", type: "INSERT", record: bid(2_001) }]);

@@ -1049,7 +1049,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
   const [resultReadyAuctionId, setResultReadyAuctionId] = useState<string | null>(null);
   const [dismissedResultAuctionId, setDismissedResultAuctionId] = useState<string | null>(null);
   const status = effectiveStatus(auction);
-  const showLeaderboardAmounts = auction.status === "ended";
+  const showAmounts = auction.status === "ended";
   const countdownOpen = useBiddingOpen(status, auction.starts_at);
   const biddingOpen = countdownOpen && connection === "live";
   const starting = status === "active" && !countdownOpen;
@@ -1099,11 +1099,11 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
     setSubmitting(true);
     setFeedback(null);
     try {
-      const receipt = await onPlaceBid(parsed);
+      await onPlaceBid(parsed);
       setAmount("");
       setFeedback({
         kind: "success",
-        text: `Bid accepted at ${formatMoney(receipt.amount, auction.currency)}.`,
+        text: "Your bid has been accepted.",
       });
     } catch (bidError) {
       setFeedback({
@@ -1163,7 +1163,6 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                   />
                 </div>
                 <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-ink/10 pt-5 text-sm sm:flex sm:flex-wrap sm:gap-8">
-                  <div><span className="block text-ink/45">Opening</span><strong className="mt-1 block">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                   <div><span className="block text-ink/45">Winner spots</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
                 </div>
               </div>
@@ -1188,11 +1187,11 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
               </div>
             )}
             {leaderboard.length ? (
-              <ol className="divide-y divide-ink/10" aria-label={showLeaderboardAmounts ? "Final bidders and bids" : "Current bidder standings"}>
+              <ol className="divide-y divide-ink/10" aria-label={showAmounts ? "Final bidders and bids" : "Current bidder standings"}>
                 {leaderboard.map((entry) => (
                   <li
                     key={entry.participant_id}
-                    className={`grid ${showLeaderboardAmounts ? "grid-cols-[2rem_minmax(0,1fr)_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto]" : "grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_minmax(0,1fr)]"} items-center gap-2 py-3 sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
+                    className={`grid ${showAmounts ? "grid-cols-[2rem_minmax(0,1fr)_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto]" : "grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_minmax(0,1fr)]"} items-center gap-2 py-3 sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
                   >
                     <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold sm:h-9 sm:w-9 ${entry.is_winner ? "bg-lime" : "bg-ink/5"}`}>
                       {entry.bidder_rank}
@@ -1205,7 +1204,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                         </span>
                       )}
                     </div>
-                    {showLeaderboardAmounts && (
+                    {showAmounts && (
                       <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(entry.amount, auction.currency)}</strong>
                     )}
                   </li>
@@ -1222,10 +1221,12 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
         <aside className="order-2 lg:order-none lg:sticky lg:top-6 lg:self-start">
           <section className="overflow-hidden rounded-3xl bg-forest text-white shadow-card">
             <div className="p-6 sm:p-8">
-              <p className="text-xs font-bold uppercase tracking-[.18em] text-white/55">{highest ? "Current highest bid" : "Opening price"}</p>
-              <p className="mt-3 break-words text-4xl font-semibold tabular-nums sm:text-6xl">
-                {formatMoney(highest?.amount ?? auction.starting_price, auction.currency)}
-              </p>
+              <p className="text-xs font-bold uppercase tracking-[.18em] text-white/55">{status === "ended" ? "Final leader" : "Current leader"}</p>
+              {showAmounts && highest && (
+                <p className="mt-3 break-words text-4xl font-semibold tabular-nums sm:text-6xl">
+                  {formatMoney(highest.amount, auction.currency)}
+                </p>
+              )}
               <div className="mt-5 flex min-h-10 items-center gap-3 border-t border-white/15 pt-5">
                 {highest ? (
                   <><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-lime text-xs font-bold text-ink">{highest.username.slice(0, 2).toUpperCase()}</span><div className="min-w-0"><span className="block text-xs text-white/50">Leading participant</span><strong className="block truncate">{highest.username}</strong></div></>
@@ -1244,22 +1245,18 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 </div>
               </div>
               <label className="field-label" htmlFor="bid-amount">Your bid</label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-ink/40">{auction.currency}</span>
-                <input
-                  id="bid-amount"
-                  className="field min-h-14 text-xl font-semibold tabular-nums"
-                  style={{ paddingLeft: "4.5rem" }}
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  inputMode="decimal"
-                  placeholder="Enter your amount"
-                  disabled={!biddingOpen || submitting}
-                  aria-describedby="bid-help"
-                />
-              </div>
+              <input
+                id="bid-amount"
+                className="field min-h-14 text-xl font-semibold tabular-nums"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                inputMode="decimal"
+                placeholder="Enter your amount"
+                disabled={!biddingOpen || submitting}
+                aria-describedby="bid-help"
+              />
               <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
-                Any positive amount is accepted, even below the opening price or current highest bid.
+                Any positive amount with up to two decimal places is accepted.
                 Every accepted bid is saved. Your highest bid counts for the leaderboard.
               </p>
               <button className="btn-primary mt-5 w-full" disabled={!biddingOpen || submitting}>
@@ -1355,7 +1352,7 @@ function AuctionResultModal({
         </p>
         {personalRank ? (
           <p className="mt-2 leading-7 text-ink/60">
-            You finished #{personalRank.bidder_rank} with a bid of {formatMoney(personalRank.amount, auction.currency)}.
+            You finished #{personalRank.bidder_rank}{auction.status === "ended" ? ` with a bid of ${formatMoney(personalRank.amount, auction.currency)}` : ""}.
           </p>
         ) : (
           <p className="mt-2 leading-7 text-ink/60">
