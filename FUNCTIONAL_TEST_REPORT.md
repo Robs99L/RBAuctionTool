@@ -1,5 +1,11 @@
 # Funktionstest und Fehlerkorrekturen des Auktionstools
 
+## Präsentation mit Top 10 und zusätzlichen Gewinnerplätzen
+
+Stand: 16. November 2026. Die Präsentationsrangliste zeigt die Top 10. Sind mehr als zehn Gewinnerplätze eingestellt, zeigt sie entsprechend mehr Personen: beispielsweise elf bei elf oder 15 bei 15 Gewinnerplätzen. Haben weniger Personen geboten, gibt es entsprechend weniger Zeilen. Nur tatsächliche Gewinnerplätze werden markiert; die Gewinnerzahl zählt ausschließlich diese Plätze. Nach dem manuellen Auktionsende zeigt die gesamte angezeigte Rangliste die finalen Beträge. Während der Auktion bleiben sie verborgen.
+
+Das vorherige Layout mit der Beschreibung in der Eventkachel bleibt erhalten. Die folgenden Abschnitte dokumentieren frühere Prüfstände.
+
 ## Öffentliche Beträge erst nach Auktionsende
 
 Stand: 16. November 2026. Präsentation und Teilnehmeransicht verbergen Geldbeträge während der Auktion. Nach dem manuellen Auktionsende zeigt die Präsentation die Gewinnerbeträge; die Teilnehmeransicht zeigt die finalen Gebotsbeträge im Leaderboard, beim finalen Höchstgebot und im persönlichen Ergebnisdialog. Startpreis, Währungslabel am Eingabefeld und Beträge in Gebotsbestätigungen bleiben entfernt. „Recent activities“ ist in der Teilnehmeransicht nicht vorhanden. Die Adminansicht zeigt Gebotsbeträge und Spendensummen durchgehend. Ein abgelaufener Anzeigetimer allein blendet keine öffentlichen Beträge ein.

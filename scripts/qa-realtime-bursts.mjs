@@ -253,13 +253,14 @@ function bid(i, amount = i + 100) {
 }
 const money = amount => new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
 const presentationNames = "Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)";
+const presentationRows = () => rows().slice(0, Math.max(10, auction.winner_count));
 async function viewsAgree(amount) {
   const [names, adminHasAmount, ...participantNames] = await Promise.all([
     pages[0].page.evaluate(presentationNames),
     pages[1].page.evaluate(`document.body.innerText.includes(${JSON.stringify(money(amount))})`),
     ...pages.slice(2).map(({ page }) => page.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li div > p')).map(element=>element.textContent)")),
   ]);
-  return JSON.stringify(names) === JSON.stringify(rows().filter(row => row.is_winner).map(row => row.username))
+  return JSON.stringify(names) === JSON.stringify(presentationRows().map(row => row.username))
     && adminHasAmount
     && participantNames.every(names => JSON.stringify(names) === JSON.stringify(rows().map(row => row.username)));
 }
@@ -296,6 +297,16 @@ try {
   await waitFor(async () => (await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("!!document.querySelector('#bid-amount') && !document.querySelector('#bid-amount').disabled")))).every(Boolean), "both bidder sessions ready");
   results.push({ scenario: "Four independent browser contexts load the same active auction and become live", passed: true });
   await assertHiddenPresentationAmounts();
+  const fewBids = Array.from({ length: 3 }, (_, i) => bid(5_000 + i, 10 + i));
+  bids.push(...fewBids);
+  auction.winner_count = 2;
+  await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }, ...fewBids.map(record => ({ table: "bids", type: "INSERT", record }))]);
+  await waitFor(() => viewsAgree(12), "three bidders appear without empty filler rows");
+  assert.equal(await pages[0].page.evaluate("document.querySelectorAll('ol[aria-label] li').length"), 3);
+  assert.equal(await pages[0].page.evaluate("document.querySelectorAll('ol[aria-label] li div > span').length"), 2);
+  results.push({ scenario: "Three bidders produce three rows and only two winning-place badges when two can win", passed: true });
+  auction.winner_count = 12;
+  await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
   if (batchedRealtime) {
     assert((await all("window.__qaRawBidSubscriptions() === 0")).every(Boolean));
     results.push({ scenario: "All four views use the shared private Broadcast with zero raw bid/name subscriptions", passed: true });
@@ -394,11 +405,12 @@ try {
 
   auction.winner_count = 2;
   await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
-  await waitFor(() => viewsAgree(9000), "presentation reduces to exactly two current winners");
-  assert.equal(await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length"), 2);
+  await waitFor(() => viewsAgree(9000), "presentation reduces to the top 10 with two current winners");
+  assert.equal(await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length"), 10);
+  assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).filter(row=>row.querySelector('div > span')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 2).map(row => row.username));
   await assertHiddenPresentationAmounts();
   const liveLayout = await capturePresentation("live-desktop", 1920, 1080);
-  results.push({ scenario: "Two winning places show exactly two names, with no remaining Top 10 rows or currency values", passed: true });
+  results.push({ scenario: "Two winning places show the top 10 names, highlight only the two winners and hide currency values", passed: true });
 
   auction.timer_duration_seconds = 1;
   await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
@@ -408,11 +420,23 @@ try {
   results.push({ scenario: "Elapsed visual timer keeps amounts hidden and bidding open until the administrator ends the event", passed: true });
 
   auction.timer_duration_seconds = 120;
+  for (const winnerCount of [1, 10, 11]) {
+    auction.winner_count = winnerCount;
+    await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
+    await waitFor(() => viewsAgree(9000), `presentation updates for ${winnerCount} winning places`);
+    assert.equal(await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length"), winnerCount > 10 ? winnerCount : 10);
+    assert.equal(await presentation.evaluate("document.querySelectorAll('ol[aria-label] li div > span').length"), winnerCount);
+    await assertHiddenPresentationAmounts();
+    results.push({ scenario: `${winnerCount} winning places show ${winnerCount > 10 ? winnerCount : 10} ranked names and ${winnerCount} winner badges`, passed: true });
+  }
   auction.winner_count = 15;
   await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
   await waitFor(async () => await presentation.evaluate("document.querySelectorAll('ol[aria-label] li').length===15"), "winner count update");
   await assertHiddenPresentationAmounts();
   results.push({ scenario: "Realtime winner-count update expands presentation to exactly 15 winners without amounts", passed: true });
+  auction.winner_count = 2;
+  await emit([{ table: "auctions", type: "UPDATE", record: { ...auction } }]);
+  await waitFor(() => viewsAgree(9000), "top 10 restored before finalizing two winners");
   adminDelay = 2_000; dashboardDelay = 2_000;
   await all("window.dispatchEvent(new Event('online'))");
   await pause(200);
@@ -423,8 +447,9 @@ try {
   await pause(2_500);
   assert(await presentation.evaluate("document.body.innerText.includes('Final leaderboard')"));
   assert(await admin.evaluate("!Array.from(document.querySelectorAll('button')).some(button=>button.textContent==='End bidding')"));
-  assert.deepEqual(await presentation.evaluate(presentationNames), rows().filter(row => row.is_winner).map(row => row.username));
-  assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li > strong')).map(element=>element.textContent)"), rows().filter(row => row.is_winner).map(row => money(row.amount)));
+  assert.deepEqual(await presentation.evaluate(presentationNames), presentationRows().map(row => row.username));
+  assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li > strong')).map(element=>element.textContent)"), presentationRows().map(row => money(row.amount)));
+  assert.equal(await presentation.evaluate("document.querySelectorAll('ol[aria-label] li div > span').length"), 2);
   await assertAdminRanking();
   await waitFor(async () => (await Promise.all(pages.slice(2).map(({ page }) => page.evaluate("Boolean(document.querySelector('[role=dialog]'))")))).every(Boolean), "participant result dialogs after authoritative final snapshots");
   for (const { page } of pages.slice(2)) {

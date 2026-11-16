@@ -20,7 +20,7 @@ A responsive live-auction application built with Next.js, TypeScript, Tailwind C
 - Ordered product queue with one active lot and separate participants and bids for every product
 - Setup, loading, empty, error, reconnection, upcoming, active, and ended states
 - Responsive participant and administrator interfaces
-- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and only current winning bidders; winning amounts appear in the leaderboard after the event ends
+- Public `/presentation` screen, opened from administration in a new tab, with fullscreen support, the current event, synchronized timer, and the top 10 bidders or all winning places when more than 10 can win; bid amounts appear in the leaderboard after the event ends
 
 ## Local setup
 
@@ -33,7 +33,7 @@ npm run dev
 
 Open `http://localhost:3000`. Administration is at `http://localhost:3000/admin`.
 
-For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays only public names occupying a winning place, without requiring registration. Monetary amounts stay hidden until the administrator ends the event; the final winners then appear with their winning bids. The number of visible people follows the configured winning places, including fewer than 10, with no automatic page changes. The image fills the card width in 16:9; the description, timer and ranking fit the viewport without scrolling. A periodic refresh also recovers missed event changes and bids. The shared local demo synchronizes with other tabs in the same browser.
+For a shared room display, choose **Presentation view** in the admin header and select **Fullscreen** in the new tab. The screen follows event changes automatically and displays the top 10 public bidder names, without requiring registration. If more than 10 people can win, it displays as many places as the configured winner count. Fewer bidders produce fewer rows; only winning places receive winner highlighting. Monetary amounts stay hidden until the administrator ends the event; the final leaderboard then shows bid amounts. There are no automatic page changes. The image fills the card width in 16:9; the description, timer and ranking fit the viewport without scrolling. A periodic refresh also recovers missed event changes and bids. The shared local demo synchronizes with other tabs in the same browser.
 
 During bidding, the participant view shows names, ranks and winning-place indicators without monetary amounts or currency labels. Bid confirmations also omit amounts. After the administrator ends the event, the final leaderboard, final leader and personal result dialog show the final bid amounts. Participants can still enter and submit a bid while bidding is open. Administration shows amounts throughout; an elapsed visual timer alone does not reveal public amounts.
 
