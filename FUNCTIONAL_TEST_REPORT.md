@@ -4,7 +4,7 @@
 
 Stand: 16. November 2026. Die Präsentationsrangliste zeigt die Top 10. Sind mehr als zehn Gewinnerplätze eingestellt, zeigt sie entsprechend mehr Personen: beispielsweise elf bei elf oder 15 bei 15 Gewinnerplätzen. Haben weniger Personen geboten, gibt es entsprechend weniger Zeilen. Nur tatsächliche Gewinnerplätze werden markiert; die Gewinnerzahl zählt ausschließlich diese Plätze. Nach dem manuellen Auktionsende zeigt die gesamte angezeigte Rangliste die finalen Beträge. Während der Auktion bleiben sie verborgen.
 
-Das vorherige Layout mit der Beschreibung in der Eventkachel bleibt erhalten. Die folgenden Abschnitte dokumentieren frühere Prüfstände.
+Das vorherige Layout mit der Beschreibung in der Eventkachel bleibt erhalten. TypeScript, ESLint, Produktionsbuild und 18 lokale Browserszenarien sind bestanden. Geprüft wurden drei Bieter ohne leere Zusatzzeilen, ein, zwei, zehn, elf und 15 Gewinnerplätze, korrekte Gewinnerkennzeichnungen und EUR-Beträge nach dem Auktionsende. Alle HTTP-/Realtime-Daten wurden lokal simuliert; es gab keine produktiven Änderungen. Nachweise: [Browserprüfung](qa/presentation-top10-results.json), [Top 10 mit zwei Gewinnerplätzen](qa/presentation-top10-results-live-desktop.png) und [finale Rangliste](qa/presentation-top10-results-final-slide.png). Die folgenden Abschnitte dokumentieren frühere Prüfstände.
 
 ## Öffentliche Beträge erst nach Auktionsende
 
