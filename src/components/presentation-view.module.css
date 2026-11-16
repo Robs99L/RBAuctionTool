@@ -9,7 +9,8 @@
   isolation: isolate;
   display: flex;
   height: 100dvh;
-  min-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   flex-direction: column;
   background: radial-gradient(ellipse at top left, #1b3b58, transparent 60%), radial-gradient(ellipse at bottom right, #173e37, transparent 55%), #07172e;
   color: var(--presentation-ink);
@@ -40,6 +41,7 @@
 .header {
   position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -80,7 +82,7 @@
 }
 .fullscreenButton:hover:not(:disabled) { border-color: #b7c9b8; background: #eef4eb; }
 .fullscreenButton:focus-visible { outline: 3px solid var(--presentation-green); outline-offset: 3px; }
-.message { margin: 0; background: #f7eac8; padding: 12px 3vw; color: #694c1b; font-size: 18px; }
+.message { flex-shrink: 0; margin: 0; background: #f7eac8; padding: 8px 3vw; color: #694c1b; font-size: 16px; }
 
 .content {
   display: grid;
@@ -92,24 +94,29 @@
   padding: clamp(20px, 2.5vw, 48px) clamp(20px, 3vw, 64px);
 }
 .event, .leaderboard { min-width: 0; overflow: hidden; border: 1px solid #f3eedbc7; border-radius: 14px; background: var(--presentation-surface); box-shadow: 0 16px 40px #020d2029; }
-.event { display: flex; flex-direction: column; overflow-y: auto; }
-.image { border-bottom: 1px solid var(--presentation-border); background: #f2f2e9; }
-.eventDetails { display: flex; flex: 1; flex-direction: column; border-top: 3px solid var(--presentation-gold); background: linear-gradient(150deg, #fffdf7, #f6f7ee); padding: clamp(16px, 1.4vw, 20px); }
+.event { display: flex; min-height: 0; flex-direction: column; }
+.image { aspect-ratio: 16 / 9; flex-shrink: 0; background: #f2f2e9; }
+.eventDetails { display: flex; min-height: 0; flex: 1; flex-direction: column; border-top: 3px solid var(--presentation-gold); background: linear-gradient(150deg, #fffdf7, #f6f7ee); padding: clamp(12px, 1.4vw, 20px); }
+.eventDetails > :not(.description) { flex-shrink: 0; }
 .eventHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .eyebrow { margin: 0; color: var(--presentation-muted); font-size: clamp(16px, 1.2vw, 22px); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .eventStatus { border: 1px solid #dce2d5; border-radius: 999px; background: #eef0e7; padding: 6px 12px; color: #58675f; font-size: clamp(14px, 1vw, 18px); font-weight: 700; }
 .active { border-color: #cddfc9; background: #e6f0df; color: #285b3b; }
 .closed { border-color: #ebd0c8; background: #f7e8e3; color: #913d32; }
 .title { margin: 14px 0 0; overflow-wrap: anywhere; font-size: clamp(28px, 2.1vw, 44px); font-weight: 750; letter-spacing: -.035em; line-height: 1.1; }
-.description { display: -webkit-box; overflow: hidden; margin: 16px 0 0; color: #5b6b63; font-size: clamp(18px, 1.3vw, 25px); line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-.eventRules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: auto; padding-top: 12px; }
-.eventRules > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; border: 1px solid #e0e4d5; border-radius: 9px; background: #f1f3e8; padding: 12px; }
+.description { min-height: 0; flex: 1; margin-top: 12px; color: #5b6b63; }
+.description p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: clamp(18px, 1.3vw, 25px); line-height: 1.4; }
+.eventMeta { display: flex; align-items: stretch; gap: 12px; margin-top: auto; padding-top: 12px; }
+.eventMeta > * { min-width: 0; flex: 1; }
+.eventRules { display: flex; }
+.eventRules > div { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e0e4d5; border-radius: 9px; background: #f1f3e8; padding: 12px; }
 .eventRules span { display: block; color: var(--presentation-muted); font-size: clamp(16px, 1.2vw, 22px); }
 .eventRules strong { display: block; overflow-wrap: anywhere; font-size: clamp(20px, 1.3vw, 26px); font-variant-numeric: tabular-nums; }
-.timer { margin-top: 12px; border-color: #d5e2d3; border-radius: 9px; background: #eaf2e7; }
+.timer { border-color: #d5e2d3; border-radius: 9px; background: #eaf2e7; padding: 8px 12px; }
+.timer > div { flex-direction: row; align-items: center; gap: 8px; }
 .timer[aria-label*="elapsed"] { border-color: #efd3c7; background: #fff0e9; }
-.timer strong { font-size: clamp(32px, 2.5vw, 48px); }
-.timer p { font-size: clamp(15px, 1.15vw, 22px); }
+.timer strong { align-self: center; font-size: clamp(28px, 2vw, 40px); }
+.timer p { font-size: clamp(10px, .85vw, 16px); }
 
 .leaderboardFrame { position: relative; display: flex; min-width: 0; min-height: 0; }
 .leaderboard { display: flex; flex: 1; flex-direction: column; }
@@ -131,7 +138,7 @@
 .leaderboardHeader h2 { margin: 0; font-size: clamp(24px, 1.6vw, 32px); font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
 .bidderCount { border: 1px solid #ffffff26; border-radius: 999px; background: #ffffff0c; padding: 4px 10px; color: #d5e5d7; font-size: clamp(14px, 1vw, 18px); }
 .ranking { display: flex; min-height: 0; flex: 1; flex-direction: column; padding: 8px clamp(16px, 1.8vw, 32px) 20px; }
-.rankList { display: grid; min-height: 0; flex: 1; grid-template-rows: repeat(var(--leaderboard-rows, 1), minmax(clamp(28px, 2.1vw, 42px), 1fr)); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.rankList { display: grid; min-height: 0; flex: 1; grid-template-rows: repeat(var(--leaderboard-rows, 1), minmax(0, 1fr)); container-type: size; margin: 0; padding: 0; list-style: none; }
 .rankRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 16px; min-height: 0; border-bottom: 1px solid var(--presentation-border); padding: 4px 10px; }
 .namesOnly { grid-template-columns: 48px minmax(0, 1fr); }
 .rankRow:nth-child(even) { background: #f4f5ed; }
@@ -143,54 +150,113 @@
 .winningRow .rank { background: #d9e8d1; color: #285b3b; }
 .bidAmount { font-size: clamp(18px, 1.35vw, 26px); font-variant-numeric: tabular-nums; line-height: 1.2; text-align: right; white-space: nowrap; }
 .rankFooter { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 18px; color: var(--presentation-muted); font-size: clamp(14px, 1vw, 18px); }
-.emptyLeaderboard { display: flex; min-height: 240px; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 32px 16px; text-align: center; }
+.emptyLeaderboard { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 16px; text-align: center; }
 .emptyLeaderboard strong { font-size: clamp(26px, 2vw, 38px); }
 .emptyLeaderboard p { max-width: 28ch; color: var(--presentation-muted); font-size: 20px; line-height: 1.5; }
-.emptyScreen { display: flex; min-height: 60vh; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; color: #fff; text-align: center; }
+.emptyScreen { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 24px; color: #fff; text-align: center; }
 .emptyScreen .eyebrow { color: var(--presentation-gold); }
 .emptyScreen h1 { margin: 24px 0; font-size: clamp(32px, 4vw, 64px); }
 .emptyScreen > p:last-child { max-width: 50ch; color: #c6d8d4; font-size: clamp(20px, 1.7vw, 32px); line-height: 1.5; }
-.footer { position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 0 clamp(20px, 3vw, 64px) 22px; padding-right: calc(clamp(20px, 3vw, 64px) + clamp(140px, 11vw, 212px)); color: #c6d8d4; font-size: clamp(16px, 1.2vw, 22px); }
+.footer { position: relative; display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding: 0 clamp(20px, 3vw, 64px) 22px; padding-right: calc(clamp(20px, 3vw, 64px) + clamp(140px, 11vw, 212px)); color: #c6d8d4; font-size: clamp(16px, 1.2vw, 22px); }
 .christmasGifts { position: absolute; right: clamp(12px, 1.2vw, 24px); bottom: 12px; z-index: 2; width: clamp(140px, 11vw, 212px); height: auto; pointer-events: none; }
-.nextEvent { max-width: 65%; overflow-wrap: anywhere; text-align: right; }
+.nextEvent { min-width: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
-@media (min-width: 901px) and (max-height: 850px) {
+.rankRow { padding-block: min(4px, calc(100cqh / var(--leaderboard-rows, 1) * .08)); }
+.rank { height: min(30px, calc(100cqh / var(--leaderboard-rows, 1) * .8)); font-size: min(clamp(18px, 1.2vw, 23px), calc(100cqh / var(--leaderboard-rows, 1) * .6)); }
+.bidder > strong { font-size: min(clamp(18px, 1.25vw, 24px), calc(100cqh / var(--leaderboard-rows, 1) * .6)); }
+.winnerBadge { padding-block: min(2px, calc(100cqh / var(--leaderboard-rows, 1) * .04)); font-size: min(clamp(12px, .8vw, 15px), calc(100cqh / var(--leaderboard-rows, 1) * .4)); }
+.bidAmount { font-size: min(clamp(18px, 1.35vw, 26px), calc(100cqh / var(--leaderboard-rows, 1) * .6)); }
+
+@media (max-height: 850px) {
   .header { padding-top: 12px; padding-bottom: 12px; }
   .content { padding-top: 36px; padding-bottom: 20px; }
-  .eventDetails { padding: 16px; }
-  .eventRules { gap: 12px; padding-top: 10px; }
+  .eventDetails { padding: 12px; }
+  .eventHeading { gap: 8px; }
+  .eyebrow { font-size: 14px; }
+  .eventStatus { padding: 4px 8px; font-size: 12px; }
+  .eventMeta { gap: 8px; padding-top: 8px; }
   .eventRules > div { padding: 8px 10px; }
-  .timer { margin-top: 10px; }
-  .title { margin-top: 12px; }
+  .eventRules span { font-size: 14px; }
+  .eventRules strong { font-size: 20px; }
+  .title { margin-top: 8px; font-size: 26px; }
+  .description { margin-top: 8px; }
   .leaderboardHeader { padding: 16px 20px; }
-  .description { -webkit-line-clamp: 2; }
   .rankRow { padding: 2px 8px; }
   .rankFooter { padding-top: 12px; }
 }
 
 @media (max-width: 900px) {
-  .screen { height: auto; }
   .header { flex-wrap: wrap; gap: 12px; }
   .brand { gap: 8px; }
   .controls { gap: 16px; }
-  .content { grid-template-columns: minmax(0, 1fr); row-gap: 60px; padding-top: 28px; }
-  .eventRules { margin-top: 0; }
-  .rankList { display: block; overflow: visible; }
-  .bidder { display: block; }
-  .bidder > strong { -webkit-line-clamp: 2; }
-  .winnerBadge { margin-top: 3px; }
-  .rankRow { min-height: 78px; padding: 14px 0; }
   .rankRow { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; }
   .namesOnly { grid-template-columns: 38px minmax(0, 1fr); }
   .rank { width: 34px; }
-  .bidAmount { font-size: 20px; }
-  .nextEvent { max-width: 100%; text-align: left; }
+}
+
+@media (max-width: 600px), (max-height: 700px) {
+  .header { padding: 8px 12px; gap: 6px; }
+  .brand { gap: 6px; font-size: 17px; }
+  .brand > :first-child { width: 90px; height: 36px; }
+  .controls { gap: 8px; }
+  .connection { padding: 4px 8px; font-size: 12px; }
+  .fullscreenButton { min-height: 32px; padding: 4px 8px; gap: 6px; font-size: 12px; }
+  .content { gap: 24px; padding: 24px 12px 12px; }
+  .eventDetails { padding: 8px 12px; }
+  .eventHeading { gap: 6px; }
+  .eyebrow { font-size: 11px; }
+  .eventStatus { padding: 3px 8px; font-size: 11px; }
+  .title { margin-top: 6px; font-size: 20px; }
+  .description { margin-top: 6px; }
+  .description p { font-size: 15px; }
+  .eventMeta { gap: 6px; padding-top: 6px; }
+  .eventRules > div { flex-wrap: nowrap; gap: 4px; padding: 4px 6px; }
+  .eventRules span { font-size: 10px; }
+  .eventRules strong { font-size: 15px; }
+  .timer { padding: 4px 8px; }
+  .timer > div { flex-direction: row; align-items: center; gap: 8px; }
+  .timer strong { align-self: center; font-size: 24px; }
+  .timer p { font-size: 9px; letter-spacing: .04em; line-height: 1.2; }
+  .santaHat { --hat-width: 48px; right: -4px; }
+  .leaderboardHeader { padding: 8px 12px; }
+  .leaderboardHeader > .eventHeading { padding-right: 24px; }
+  .leaderboardHeader h2 { font-size: 17px; }
+  .bidderCount { padding: 2px 6px; font-size: 11px; }
+  .ranking { padding: 4px 10px 8px; }
+  .rankRow { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 6px; padding-inline: 2px; }
+  .namesOnly { grid-template-columns: 28px minmax(0, 1fr); }
+  .rank { width: 26px; }
+  .bidder { gap: 4px; }
+  .winnerBadge { padding-inline: 4px; }
+  .rankFooter { gap: 4px; padding-top: 6px; font-size: 9px; }
+  .emptyLeaderboard { padding: 8px; }
+  .emptyLeaderboard strong { font-size: 20px; }
+  .emptyLeaderboard p { margin: 6px 0 0; font-size: 13px; }
+  .footer { gap: 6px; padding: 0 12px 10px; font-size: 10px; }
+  .christmasGifts { display: none; }
+}
+
+@media (max-width: 600px) {
+  .content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 2fr) minmax(0, 1fr); }
+}
+
+@media (min-width: 601px) and (max-height: 500px) {
+  .content { grid-template-columns: minmax(0, .5fr) minmax(0, 1.5fr); }
+  .eventDetails { padding: 6px 8px; }
+  .eyebrow { font-size: 10px; }
+  .title { font-size: 17px; }
+  .eventRules span { font-size: 10px; }
+  .timer strong { font-size: 20px; }
+  .timer p { font-size: 8px; }
 }
 
 @media (max-width: 420px) {
-  .rankRow { grid-template-columns: 32px minmax(0, 1fr); }
-  .bidAmount { grid-column: 2; text-align: left; }
-  .rank { width: 30px; }
+  .brand { font-size: 13px; }
+  .brand > :first-child { width: 64px; height: 30px; }
+  .controls { gap: 6px; }
+  .connection { gap: 6px; padding: 4px 6px; font-size: 10px; }
+  .fullscreenButton { padding: 4px 6px; }
+  .fullscreenLabel { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

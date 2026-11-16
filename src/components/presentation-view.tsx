@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
 import { RbLogo } from "@/components/rb-logo";
@@ -66,11 +66,11 @@ export function PresentationView({
             <span className={connection === "live" && !error ? styles.liveDot : styles.offlineDot} aria-hidden="true" />
             {demo ? "Local demo" : error || connection === "offline" ? "Reconnecting" : connection === "live" ? "Live" : "Connecting"}
           </span>
-          <button className={styles.fullscreenButton} type="button" onClick={toggleFullscreen} disabled={!fullscreenSupported}>
+          <button className={styles.fullscreenButton} type="button" onClick={toggleFullscreen} disabled={!fullscreenSupported} aria-label={fullscreen ? "Exit fullscreen" : "Fullscreen"}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d={fullscreen ? "M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6" : "M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"} />
             </svg>
-            {fullscreen ? "Exit fullscreen" : "Fullscreen"}
+            <span className={styles.fullscreenLabel}>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
           </button>
         </div>
         <ChristmasLights />
@@ -84,7 +84,7 @@ export function PresentationView({
           <section className={styles.event} aria-labelledby="presentation-event-title">
             {auction.image_url && (
               <div className={`event-image-frame ${styles.image}`}>
-                <Image src={auction.image_url} alt={auction.title} fill sizes="(max-width: 900px) 100vw, 45vw" className="object-contain" />
+                <Image src={auction.image_url} alt={auction.title} fill sizes="(max-width: 600px) 100vw, 45vw" className="object-cover" />
               </div>
             )}
             <div className={styles.eventDetails}>
@@ -95,11 +95,13 @@ export function PresentationView({
                 </span>
               </div>
               <h1 id="presentation-event-title" className={styles.title}>{auction.title}</h1>
-              {auction.description && !auction.image_url && <p className={styles.description}>{auction.description}</p>}
-              <div className={styles.eventRules}>
-                <div><span>Winning places</span><strong>{auction.winner_count}</strong></div>
+              {auction.description && <EventDescription description={auction.description} />}
+              <div className={styles.eventMeta}>
+                <div className={styles.eventRules}>
+                  <div><span>Winning places</span><strong>{auction.winner_count}</strong></div>
+                </div>
+                <AuctionTimer key={`${auction.id}:${auction.starts_at}`} startsAt={auction.starts_at} durationSeconds={auction.timer_duration_seconds} status={auction.status} className={styles.timer} compact />
               </div>
-              <AuctionTimer key={`${auction.id}:${auction.starts_at}`} startsAt={auction.starts_at} durationSeconds={auction.timer_duration_seconds} status={auction.status} className={styles.timer} compact />
             </div>
           </section>
 
@@ -130,6 +132,56 @@ export function PresentationView({
         {nextEventName && <span className={styles.nextEvent}>Next event: <strong>{nextEventName}</strong></span>}
       </footer>
     </main>
+  );
+}
+
+function EventDescription({ description }: { description: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const text = textRef.current;
+    if (!container || !text) return;
+    let frame = 0;
+    let disposed = false;
+
+    const fit = () => {
+      if (!container.clientHeight || !container.clientWidth) return;
+      text.style.removeProperty("font-size");
+      let maximum = parseFloat(getComputedStyle(text).fontSize);
+      let minimum = 0.1;
+      // Keep the complete description in its reserved space, including line breaks.
+      const fits = () => text.scrollHeight <= container.clientHeight && text.scrollWidth <= container.clientWidth;
+      if (fits()) return;
+      while (maximum - minimum > 0.05) {
+        const size = (minimum + maximum) / 2;
+        text.style.fontSize = `${size}px`;
+        if (fits()) minimum = size;
+        else maximum = size;
+      }
+      text.style.fontSize = `${minimum}px`;
+    };
+    const scheduleFit = () => {
+      if (disposed) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
+    };
+    const observer = new ResizeObserver(scheduleFit);
+    observer.observe(container);
+    scheduleFit();
+    void document.fonts.ready.then(scheduleFit);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [description]);
+
+  return (
+    <div ref={containerRef} className={styles.description}>
+      <p ref={textRef}>{description}</p>
+    </div>
   );
 }
 
