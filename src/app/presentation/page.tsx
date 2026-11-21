@@ -8,7 +8,7 @@ export const metadata = { title: "Live Presentation | Christmas Auction" };
 export default async function PresentationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demo?: string | string[]; winners?: string | string[]; layout?: string | string[]; state?: string | string[]; description?: string | string[] }>;
+  searchParams: Promise<{ demo?: string | string[]; winners?: string | string[]; state?: string | string[]; description?: string | string[] }>;
 }) {
   const query = process.env.NODE_ENV !== "production" ? await searchParams : null;
   if (query?.demo === "true") {
@@ -17,16 +17,14 @@ export default async function PresentationPage({
       ? requestedWinnerCount
       : 2;
     const { auctions } = createDemoAuctionState();
-    const previewLayout = query.layout === "current" ? "previous" : undefined;
     const threeLineDescription = query.description === "readable";
-    const previewImage = threeLineDescription || query.layout === "balanced" || query.layout === "current";
     const ended = query.state === "ended";
     const auction: Auction = {
       ...auctions[0],
       description: threeLineDescription
         ? "Designklassiker aus Nussbaum.\nInklusive Ottoman und Zertifikat.\nAbholung nach der Auktion."
         : auctions[0].description,
-      image_url: previewImage ? createPreviewScreenshot() : auctions[0].image_url,
+      image_url: threeLineDescription ? createPreviewScreenshot() : auctions[0].image_url,
       status: ended ? "ended" : "active",
       starts_at: new Date().toISOString(),
       ends_at: ended ? new Date().toISOString() : auctions[0].ends_at,
@@ -61,7 +59,7 @@ export default async function PresentationPage({
       is_final: ended,
     }));
 
-    return <PresentationView auction={auction} leaderboard={leaderboard} connection="live" nextEventName={auctions[1].title} previewLayout={previewLayout} demo />;
+    return <PresentationView auction={auction} leaderboard={leaderboard} connection="live" nextEventName={auctions[1].title} demo />;
   }
 
   return <AuctionApp presentation />;

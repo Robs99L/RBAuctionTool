@@ -25,3 +25,6 @@ yarn-error.log*
 .netlify
 *.tsbuildinfo
 next-env.d.ts
+
+# generated local QA screenshots
+/qa/*.png

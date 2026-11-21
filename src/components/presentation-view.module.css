@@ -73,7 +73,6 @@
   padding: clamp(20px, 2.5vw, 48px) clamp(20px, 3vw, 64px);
 }
 .event, .leaderboard { min-width: 0; overflow: hidden; border: 1px solid #f3eedbc7; border-radius: 14px; background: var(--presentation-surface); box-shadow: 0 16px 40px #020d2029; }
-.previousPreview { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }
 .event { display: flex; min-height: 0; flex-direction: column; }
 .image { aspect-ratio: 16 / 9; flex-shrink: 0; background: #f2f2e9; }
 .eventDetails { display: flex; min-height: 0; flex: 0 0 auto; flex-direction: column; border-top: 3px solid var(--presentation-gold); background: linear-gradient(150deg, #fffdf7, #f6f7ee); padding: clamp(12px, 1.4vw, 20px); }

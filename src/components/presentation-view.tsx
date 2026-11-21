@@ -20,7 +20,6 @@ export function PresentationView({
   error = "",
   nextEventName,
   demo = false,
-  previewLayout,
 }: {
   auction: Auction | null;
   leaderboard: LeaderboardEntry[];
@@ -29,7 +28,6 @@ export function PresentationView({
   error?: string;
   nextEventName?: string;
   demo?: boolean;
-  previewLayout?: "previous";
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -57,10 +55,9 @@ export function PresentationView({
 
   const winners = leaderboard.filter(entry => entry.is_winner);
   const visibleEntries = leaderboard.slice(0, Math.max(10, auction?.winner_count ?? 10));
-  const previousPreview = process.env.NODE_ENV !== "production" && demo && previewLayout === "previous";
   const eventImage = auction?.image_url ? (
     <div className={`event-image-frame ${styles.image}`}>
-      <Image src={auction.image_url} alt={auction.title} fill sizes={previousPreview ? "(max-width: 600px) 100vw, 45vw" : "(max-width: 600px) 100vw, 50vw"} className="object-contain" />
+      <Image src={auction.image_url} alt={auction.title} fill sizes="(max-width: 600px) 100vw, 50vw" className="object-contain" />
     </div>
   ) : null;
 
@@ -92,7 +89,7 @@ export function PresentationView({
       {error && auction && <p className={styles.message} role="status">Live updates are temporarily unavailable. Reconnecting automatically.</p>}
 
       {auction ? (
-        <div className={`${styles.content}${previousPreview ? ` ${styles.previousPreview}` : ""}`}>
+        <div className={styles.content}>
           <section className={styles.event} aria-labelledby="presentation-event-title">
             {eventImage && <div className={styles.imageArea}>{eventImage}</div>}
             <div className={styles.eventDetails}>
