@@ -1,0 +1,29 @@
+.screen {
+  background: var(--auction-background);
+}
+
+.screen :global(.panel), .join {
+  background: #fffdf7;
+}
+
+.join {
+  width: min(calc(100% - 2rem), 80rem);
+  margin: clamp(24px, 4vw, 48px) auto;
+  overflow: hidden;
+  border: 1px solid #f3eedbc7;
+  border-radius: 24px;
+  box-shadow: 0 16px 40px #020d2029;
+}
+
+.footer {
+  color: #c6d8d4;
+}
+
+.footer :global(.text-link) {
+  color: inherit;
+  text-decoration-color: currentColor;
+}
+
+.screen :global(.skeleton) {
+  background-image: linear-gradient(90deg, #ffffff0f, #ffffff26, #ffffff0f);
+}

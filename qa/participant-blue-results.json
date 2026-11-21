@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-21T20:08:56.963Z",
+  "mode": "Local mocked HTTP and Realtime, no hosted writes",
+  "results": [
+    {
+      "view": "registration",
+      "width": 1662,
+      "height": 1049,
+      "backgroundImage": "radial-gradient(at 0% 0%, rgb(27, 59, 88), rgba(0, 0, 0, 0) 60%), radial-gradient(at 100% 100%, rgb(23, 62, 55), rgba(0, 0, 0, 0) 55%), none",
+      "backgroundColor": "rgb(7, 23, 46)",
+      "snowLayers": 1,
+      "noHorizontalOverflow": true,
+      "headerColor": "rgb(255, 255, 255)",
+      "cardColor": "rgb(255, 253, 247)"
+    },
+    {
+      "view": "registration",
+      "width": 390,
+      "height": 844,
+      "backgroundImage": "radial-gradient(at 0% 0%, rgb(27, 59, 88), rgba(0, 0, 0, 0) 60%), radial-gradient(at 100% 100%, rgb(23, 62, 55), rgba(0, 0, 0, 0) 55%), none",
+      "backgroundColor": "rgb(7, 23, 46)",
+      "snowLayers": 1,
+      "noHorizontalOverflow": true,
+      "headerColor": "rgb(255, 255, 255)",
+      "cardColor": "rgb(255, 253, 247)"
+    },
+    {
+      "view": "bidding",
+      "width": 390,
+      "height": 844,
+      "backgroundImage": "radial-gradient(at 0% 0%, rgb(27, 59, 88), rgba(0, 0, 0, 0) 60%), radial-gradient(at 100% 100%, rgb(23, 62, 55), rgba(0, 0, 0, 0) 55%), none",
+      "backgroundColor": "rgb(7, 23, 46)",
+      "snowLayers": 0,
+      "noHorizontalOverflow": true,
+      "headerColor": "rgb(255, 255, 255)",
+      "cardColor": "rgb(255, 253, 247)"
+    },
+    {
+      "view": "bidding",
+      "width": 1280,
+      "height": 900,
+      "backgroundImage": "radial-gradient(at 0% 0%, rgb(27, 59, 88), rgba(0, 0, 0, 0) 60%), radial-gradient(at 100% 100%, rgb(23, 62, 55), rgba(0, 0, 0, 0) 55%), none",
+      "backgroundColor": "rgb(7, 23, 46)",
+      "snowLayers": 0,
+      "noHorizontalOverflow": true,
+      "headerColor": "rgb(255, 255, 255)",
+      "cardColor": "rgb(255, 253, 247)"
+    },
+    {
+      "view": "presentation",
+      "identicalBackground": true
+    }
+  ],
+  "failures": []
+}

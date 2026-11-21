@@ -8,6 +8,8 @@ import christmasAuctionImage from "../../Roland Berger Christmas Auction Pic.png
 import { AuctionTimer } from "@/components/auction-timer";
 import { PresentationView } from "@/components/presentation-view";
 import { RbLogo } from "@/components/rb-logo";
+import { Snowfall } from "@/components/snowfall";
+import styles from "./auction-app.module.css";
 import {
   applyAuctionRules,
   applyLiveAuctionEvents,
@@ -733,7 +735,7 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   }
 
   return (
-    <main className="min-h-screen bg-cream">
+    <main className={`${styles.screen} min-h-screen flow-root`}>
       <Header connection={viewConnection} participantCount={participantCount} />
       {participant || (!rejoinRequested && effectiveStatus(auction) === "ended") ? (
         <AuctionRoom
@@ -900,7 +902,7 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
   if (!demoAuction) return <NoAuction />;
 
   return (
-    <main className="min-h-screen bg-cream">
+    <main className={`${styles.screen} min-h-screen flow-root`}>
       <div className="bg-lime px-4 py-2 text-sm text-ink sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 sm:gap-4">
           <span className="min-w-0"><strong>Local demo</strong> · Changes are saved in this browser.</span>
@@ -944,7 +946,7 @@ function Header({
   participantCount: number;
 }) {
   return (
-    <header className="border-b border-ink/10 bg-cream/90 px-4 py-4 backdrop-blur sm:px-8">
+    <header className="border-b border-ink/10 bg-white px-4 py-4 sm:px-8">
       <div className="mx-auto flex max-w-7xl flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="brand-lockup">
           <RbLogo />
@@ -1000,7 +1002,8 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] items-center lg:min-h-[calc(100dvh-81px)] lg:grid-cols-[1.08fr_.92fr]">
+    <div className={`${styles.join} grid grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[1.08fr_.92fr]`}>
+      <Snowfall variant="participant" />
       <section className="h-36 min-w-0 max-w-full overflow-hidden bg-ink sm:h-56 lg:h-auto">
         <Image
           src={christmasAuctionImage}
@@ -1337,7 +1340,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
           </section>
         </aside>
       </div>
-      <footer className="flex flex-col gap-3 py-8 text-xs text-ink/40 sm:flex-row sm:items-center sm:justify-between">
+      <footer className={`${styles.footer} flex flex-col gap-3 py-8 text-xs sm:flex-row sm:items-center sm:justify-between`}>
         <span>Names are self-reported; email addresses remain private.</span>
         <Link href="/admin" className="text-link">Auction administration</Link>
       </footer>
@@ -1423,7 +1426,7 @@ function AuctionResultModal({
 
 function NoAuction() {
   return (
-    <main className="grid min-h-dvh place-items-center bg-cream p-5">
+    <main className={`${styles.screen} grid min-h-dvh place-items-center p-5`}>
       <section className="panel max-w-lg p-6 text-center sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-forest">Ready for a lot</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">No auction has been created</h1>
@@ -1436,7 +1439,7 @@ function NoAuction() {
 
 function ErrorScreen({ message }: { message: string }) {
   return (
-    <main className="grid min-h-dvh place-items-center bg-cream p-5">
+    <main className={`${styles.screen} grid min-h-dvh place-items-center p-5`}>
       <section className="panel max-w-lg p-6 sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-coral">Connection error</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-[-.04em]">The auction could not load</h1>
@@ -1449,7 +1452,7 @@ function ErrorScreen({ message }: { message: string }) {
 
 function ConfigurationScreen() {
   return (
-    <main className="grid min-h-dvh place-items-center bg-cream p-5">
+    <main className={`${styles.screen} grid min-h-dvh place-items-center p-5`}>
       <section className="panel max-w-lg p-6 sm:p-8">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-coral">Service unavailable</p>
         <h1 className="mt-3 text-3xl font-semibold">Auction configuration is missing</h1>
@@ -1463,7 +1466,7 @@ function ConfigurationScreen() {
 
 function LoadingScreen() {
   return (
-    <main className="min-h-screen bg-cream p-5 sm:p-10">
+    <main className={`${styles.screen} min-h-screen p-5 sm:p-10`}>
       <div className="mx-auto max-w-7xl">
         <div className="skeleton h-9 w-40" />
         <div className="mt-10 grid gap-6 lg:grid-cols-[1.15fr_.85fr]">

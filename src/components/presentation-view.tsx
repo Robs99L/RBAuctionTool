@@ -1,11 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useState, type CSSProperties } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
 import { OnlineCount } from "@/components/online-count";
 import { RbLogo } from "@/components/rb-logo";
+import { Snowfall } from "@/components/snowfall";
 import { formatMoney } from "@/lib/format";
 import type { Auction, LeaderboardEntry } from "@/lib/types";
 
@@ -19,6 +20,7 @@ export function PresentationView({
   error = "",
   nextEventName,
   demo = false,
+  previewLayout,
 }: {
   auction: Auction | null;
   leaderboard: LeaderboardEntry[];
@@ -27,6 +29,7 @@ export function PresentationView({
   error?: string;
   nextEventName?: string;
   demo?: boolean;
+  previewLayout?: "previous";
 }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
@@ -54,6 +57,12 @@ export function PresentationView({
 
   const winners = leaderboard.filter(entry => entry.is_winner);
   const visibleEntries = leaderboard.slice(0, Math.max(10, auction?.winner_count ?? 10));
+  const previousPreview = process.env.NODE_ENV !== "production" && demo && previewLayout === "previous";
+  const eventImage = auction?.image_url ? (
+    <div className={`event-image-frame ${styles.image}`}>
+      <Image src={auction.image_url} alt={auction.title} fill sizes={previousPreview ? "(max-width: 600px) 100vw, 45vw" : "(max-width: 600px) 100vw, 50vw"} className="object-contain" />
+    </div>
+  ) : null;
 
   return (
     <main className={styles.screen}>
@@ -83,13 +92,9 @@ export function PresentationView({
       {error && auction && <p className={styles.message} role="status">Live updates are temporarily unavailable. Reconnecting automatically.</p>}
 
       {auction ? (
-        <div className={styles.content}>
+        <div className={`${styles.content}${previousPreview ? ` ${styles.previousPreview}` : ""}`}>
           <section className={styles.event} aria-labelledby="presentation-event-title">
-            {auction.image_url && (
-              <div className={`event-image-frame ${styles.image}`}>
-                <Image src={auction.image_url} alt={auction.title} fill sizes="(max-width: 600px) 100vw, 45vw" className="object-cover" />
-              </div>
-            )}
+            {eventImage && <div className={styles.imageArea}>{eventImage}</div>}
             <div className={styles.eventDetails}>
               <div className={styles.eventHeading}>
                 <p className={styles.eyebrow}>Current event</p>
@@ -98,7 +103,7 @@ export function PresentationView({
                 </span>
               </div>
               <h1 id="presentation-event-title" className={styles.title}>{auction.title}</h1>
-              {auction.description && <EventDescription description={auction.description} />}
+              {auction.description && <div className={styles.description}><p>{auction.description}</p></div>}
               <div className={styles.eventMeta}>
                 <div className={styles.eventRules}>
                   <div><span>Winning places</span><strong>{auction.winner_count}</strong></div>
@@ -135,77 +140,6 @@ export function PresentationView({
         {nextEventName && <span className={styles.nextEvent}>Next event: <strong>{nextEventName}</strong></span>}
       </footer>
     </main>
-  );
-}
-
-function EventDescription({ description }: { description: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLParagraphElement>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const text = textRef.current;
-    if (!container || !text) return;
-    let frame = 0;
-    let disposed = false;
-
-    const fit = () => {
-      if (!container.clientHeight || !container.clientWidth) return;
-      text.style.removeProperty("font-size");
-      let maximum = parseFloat(getComputedStyle(text).fontSize);
-      let minimum = 0.1;
-      // Keep the complete description in its reserved space, including line breaks.
-      const fits = () => text.scrollHeight <= container.clientHeight && text.scrollWidth <= container.clientWidth;
-      if (fits()) return;
-      while (maximum - minimum > 0.05) {
-        const size = (minimum + maximum) / 2;
-        text.style.fontSize = `${size}px`;
-        if (fits()) minimum = size;
-        else maximum = size;
-      }
-      text.style.fontSize = `${minimum}px`;
-    };
-    const scheduleFit = () => {
-      if (disposed) return;
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(fit);
-    };
-    const observer = new ResizeObserver(scheduleFit);
-    observer.observe(container);
-    scheduleFit();
-    void document.fonts.ready.then(scheduleFit);
-    return () => {
-      disposed = true;
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [description]);
-
-  return (
-    <div ref={containerRef} className={styles.description}>
-      <p ref={textRef}>{description}</p>
-    </div>
-  );
-}
-
-function Snowfall() {
-  return (
-    <div className={styles.snowfall} aria-hidden="true">
-      {Array.from({ length: 144 }, (_, index) => (
-        <span
-          key={index}
-          className={styles.snowflake}
-          style={{
-            left: `${(index * 37 + 11) % 100}%`,
-            width: `${4 + (index % 6)}px`,
-            height: `${4 + (index % 6)}px`,
-            opacity: 0.65 + (index % 4) * 0.1,
-            animationDuration: `${10 + (index % 6) * 2}s`,
-            animationDelay: `${-((index * 7.3) % 20)}s`,
-          }}
-        />
-      ))}
-    </div>
   );
 }
 

@@ -1,0 +1,75 @@
+{
+  "reducedMotionHidesSnow": true,
+  "realAuctionWrites": 0,
+  "results": [
+    {
+      "scenario": "Registration",
+      "viewport": "1662x1049",
+      "passed": true,
+      "flakes": 144,
+      "hiddenFromAT": true,
+      "pointerEvents": "none",
+      "zIndex": "10",
+      "animation": "snowfall-module__NV9Wwa__snowfall",
+      "transform": "matrix(1, 0, 0, 1, 9.70827, 773.116)",
+      "pageFits": true,
+      "inputReceivesClicks": true,
+      "point": {
+        "x": 1176.59375,
+        "y": 657.703125
+      },
+      "amountsHidden": true,
+      "animationMoves": true,
+      "typingWorks": true
+    },
+    {
+      "scenario": "Registration",
+      "viewport": "390x844",
+      "passed": true,
+      "flakes": 144,
+      "hiddenFromAT": true,
+      "pointerEvents": "none",
+      "zIndex": "10",
+      "animation": "snowfall-module__NV9Wwa__snowfall",
+      "transform": "matrix(1, 0, 0, 1, 8.08346, 577.115)",
+      "pageFits": true,
+      "inputReceivesClicks": true,
+      "point": {
+        "x": 195,
+        "y": 809.703125
+      },
+      "amountsHidden": true,
+      "animationMoves": true,
+      "typingWorks": true
+    },
+    {
+      "scenario": "Participant auction room",
+      "viewport": "1280x900",
+      "passed": true,
+      "flakes": 144,
+      "hiddenFromAT": true,
+      "pointerEvents": "none",
+      "zIndex": "10",
+      "animation": "snowfall-module__NV9Wwa__snowfall",
+      "transform": "matrix(1, 0, 0, 1, 7.41651, 593.795)",
+      "pageFits": true,
+      "inputReceivesClicks": true,
+      "point": {
+        "x": 982.875,
+        "y": 431.90625
+      },
+      "amountsHidden": true,
+      "animationMoves": true,
+      "typingWorks": true
+    },
+    {
+      "scenario": "Presentation keeps background snowfall",
+      "passed": true,
+      "layers": 1,
+      "flakes": 144,
+      "zIndex": "-1",
+      "pointerEvents": "none",
+      "pageFits": true
+    }
+  ]
+}

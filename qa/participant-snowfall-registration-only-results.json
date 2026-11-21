@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-21T20:04:32.728Z",
+  "mode": "Local mocked HTTP and Realtime, no hosted writes",
+  "results": [
+    {
+      "view": "registration",
+      "layers": [
+        {
+          "flakes": 144,
+          "display": "block",
+          "pointerEvents": "none"
+        }
+      ]
+    },
+    {
+      "view": "bidding",
+      "layers": [],
+      "passed": true
+    },
+    {
+      "view": "presentation",
+      "layers": [
+        {
+          "flakes": 144,
+          "display": "block",
+          "pointerEvents": "auto"
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "failures": []
+}

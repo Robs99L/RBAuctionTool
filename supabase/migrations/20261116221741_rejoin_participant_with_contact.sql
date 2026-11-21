@@ -198,3 +198,4 @@ grant execute on function public.place_bid(uuid, numeric)
 
 comment on function public.place_bid(uuid, numeric) is
   'Stores every positive two-decimal bid during an active event; no opening-price, minimum-step or maximum-increase requirement. Rankings use the highest bid per participant.';
+

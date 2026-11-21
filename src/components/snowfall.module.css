@@ -1,0 +1,28 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.flake {
+  position: absolute;
+  top: -12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 7px #ffffff66;
+  animation: snowfall 20s linear infinite;
+}
+
+.participant { z-index: 10; opacity: .65; }
+.participant .flake { border: 1px solid #71878f33; box-shadow: 0 0 6px #536d793b; }
+
+@keyframes snowfall {
+  from { transform: translate3d(-12px, -12px, 0); }
+  to { transform: translate3d(18px, calc(100dvh + 24px), 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer { display: none; }
+}

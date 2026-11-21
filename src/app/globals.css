@@ -9,6 +9,7 @@
   --forest: #174b3a;
   --lime: #d9f55f;
   --line: rgba(24, 32, 29, 0.14);
+  --auction-background: radial-gradient(ellipse at top left, #1b3b58, transparent 60%), radial-gradient(ellipse at bottom right, #173e37, transparent 55%), #07172e;
 }
 
 * { box-sizing: border-box; }

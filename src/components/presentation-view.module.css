@@ -12,30 +12,8 @@
   min-height: 0;
   overflow: hidden;
   flex-direction: column;
-  background: radial-gradient(ellipse at top left, #1b3b58, transparent 60%), radial-gradient(ellipse at bottom right, #173e37, transparent 55%), #07172e;
+  background: var(--auction-background);
   color: var(--presentation-ink);
-}
-
-.snowfall {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.snowflake {
-  position: absolute;
-  top: -12px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 7px #ffffff66;
-  animation: snowfall 20s linear infinite;
-}
-
-@keyframes snowfall {
-  from { transform: translate3d(-12px, -12px, 0); }
-  to { transform: translate3d(18px, calc(100dvh + 24px), 0); }
 }
 
 .header {
@@ -89,15 +67,17 @@
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: clamp(20px, 2vw, 40px);
   padding: clamp(20px, 2.5vw, 48px) clamp(20px, 3vw, 64px);
 }
 .event, .leaderboard { min-width: 0; overflow: hidden; border: 1px solid #f3eedbc7; border-radius: 14px; background: var(--presentation-surface); box-shadow: 0 16px 40px #020d2029; }
+.previousPreview { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }
 .event { display: flex; min-height: 0; flex-direction: column; }
 .image { aspect-ratio: 16 / 9; flex-shrink: 0; background: #f2f2e9; }
-.eventDetails { display: flex; min-height: 0; flex: 1; flex-direction: column; border-top: 3px solid var(--presentation-gold); background: linear-gradient(150deg, #fffdf7, #f6f7ee); padding: clamp(12px, 1.4vw, 20px); }
+.eventDetails { display: flex; min-height: 0; flex: 0 0 auto; flex-direction: column; border-top: 3px solid var(--presentation-gold); background: linear-gradient(150deg, #fffdf7, #f6f7ee); padding: clamp(12px, 1.4vw, 20px); }
+.eventDetails:only-child { flex: 1; }
 .eventDetails > :not(.description) { flex-shrink: 0; }
 .eventHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .eyebrow { margin: 0; color: var(--presentation-muted); font-size: clamp(16px, 1.2vw, 22px); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -105,8 +85,24 @@
 .active { border-color: #cddfc9; background: #e6f0df; color: #285b3b; }
 .closed { border-color: #ebd0c8; background: #f7e8e3; color: #913d32; }
 .title { margin: 14px 0 0; overflow-wrap: anywhere; font-size: clamp(28px, 2.1vw, 44px); font-weight: 750; letter-spacing: -.035em; line-height: 1.1; }
-.description { min-height: 0; flex: 1; margin-top: 12px; color: #5b6b63; }
-.description p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: clamp(18px, 1.3vw, 25px); line-height: 1.4; }
+.description {
+  --description-font-size: clamp(20px, 2.3dvh, 50px);
+  min-height: calc(3 * 1.4 * var(--description-font-size));
+  flex: 0 0 auto;
+  margin-top: 12px;
+  color: var(--presentation-ink);
+}
+.description p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--description-font-size); line-height: 1.4; }
+.imageArea {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+  background: #f2f2e9;
+}
+.imageArea .image { width: min(100%, calc(100cqh * 16 / 9)); height: auto; }
 .eventMeta { display: flex; align-items: stretch; gap: 12px; margin-top: auto; padding-top: 12px; }
 .eventMeta > * { min-width: 0; flex: 1; }
 .eventRules { display: flex; }
@@ -210,7 +206,6 @@
   .eventStatus { padding: 3px 8px; font-size: 11px; }
   .title { margin-top: 6px; font-size: 20px; }
   .description { margin-top: 6px; }
-  .description p { font-size: 15px; }
   .eventMeta { gap: 6px; padding-top: 6px; }
   .eventRules > div { flex-wrap: nowrap; gap: 4px; padding: 4px 6px; }
   .eventRules span { font-size: 10px; }
@@ -260,8 +255,4 @@
   .onlineCount { gap: 4px; padding: 4px 6px; font-size: 10px; }
   .fullscreenButton { padding: 4px 6px; }
   .fullscreenLabel { display: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .snowflake { animation-play-state: paused; }
 }
