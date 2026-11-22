@@ -1197,7 +1197,7 @@ function AuctionManagerView({
               </div>
             </div>
             <p className="text-xs leading-5 text-ink/45">
-              The starting price is a reference. Any positive bid is accepted, including lower amounts.
+              The starting price is the minimum accepted bid. Lower amounts are rejected.
               The leaderboard uses each participant&apos;s highest bid. The timer never ends bidding automatically.
             </p>
             {message && <div className={`notice ${message.kind === "error" ? "notice-error" : "notice-success"}`} role="status">{message.text}</div>}

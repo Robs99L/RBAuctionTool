@@ -21,7 +21,7 @@ describe("bid acceptance in PostgreSQL", () => {
       insert into public.auctions
         (id, title, starting_price, minimum_increment, maximum_bid_difference,
          winner_count, timer_duration_seconds, status, starts_at)
-      values ($1, 'Any positive bid', 500, 25, 100, 2, 120, 'active', now() - interval '1 minute')
+      values ($1, 'Starting price floor', 500, 25, 100, 2, 120, 'active', now() - interval '1 minute')
     `, [auctionId]);
     for (let i = 0; i < userIds.length; i++) {
       await db.query(`insert into public.participants (id, auction_id, user_id, username)
@@ -37,7 +37,15 @@ describe("bid acceptance in PostgreSQL", () => {
   async function placeBid(userId: string | null, amount: string | null) {
     await db.exec("set local role authenticated;");
     await db.query("select set_config('request.jwt.claim.sub', $1, true)", [userId ?? ""]);
-    return (await db.query<Receipt>("select * from public.place_bid($1, $2::numeric)", [auctionId, amount])).rows[0];
+    await db.exec("savepoint submission;");
+    try {
+      const receipt = (await db.query<Receipt>("select * from public.place_bid($1, $2::numeric)", [auctionId, amount])).rows[0];
+      await db.exec("release savepoint submission;");
+      return receipt;
+    } catch (error) {
+      await db.exec("rollback to savepoint submission; release savepoint submission;");
+      throw error;
+    }
   }
 
   async function asOwner() { await db.exec("set local role postgres;"); }
@@ -46,34 +54,51 @@ describe("bid acceptance in PostgreSQL", () => {
     return (await db.query<{ amount: string }>("select amount from public.bids order by created_at, id")).rows.map(bid => Number(bid.amount));
   }
 
-  it("stores the first bid below the opening price and matching bids from different people", async () => {
+  it("accepts first bids equal to the starting price and matching bids from different people", async () => {
     const receipts = [];
-    for (const userId of userIds) receipts.push(await placeBid(userId, "10"));
+    for (const userId of userIds) receipts.push(await placeBid(userId, "500"));
     expect(new Set(receipts.map(receipt => receipt.bid_id)).size).toBe(4);
-    expect(await history()).toEqual([10, 10, 10, 10]);
+    expect(await history()).toEqual([500, 500, 500, 500]);
     const leaderboard = (await db.query<{ participant_id: string; is_winner: boolean }>(
       "select * from public.get_auction_leaderboard($1)", [auctionId])).rows;
     expect(leaderboard.map(row => row.participant_id)).toEqual(participantIds);
     expect(leaderboard.filter(row => row.is_winner)).toHaveLength(2);
   });
 
-  it("stores a lower non-winning bid while keeping the earlier personal best and donation total", async () => {
+  it.each(["0.01", "10", "499.99"])("rejects a first bid below the starting price: %s", async amount => {
+    await expect(placeBid(userIds[0], amount)).rejects.toThrow("at least the starting price");
+    expect(await history()).toEqual([]);
+  });
+
+  it("rejects subsequent bids below the starting price and preserves previously stored bids", async () => {
+    await db.query(`insert into public.bids (auction_id, participant_id, amount, created_at)
+      values ($1, $2, 700, clock_timestamp() - interval '2 seconds'),
+             ($1, $3, 10, clock_timestamp() - interval '1 second')`, [auctionId, participantIds[0], participantIds[1]]);
+    for (const userId of [userIds[0], userIds[1], userIds[2]]) {
+      await expect(placeBid(userId, "499.99")).rejects.toThrow("at least the starting price");
+    }
+    expect(await history()).toEqual([700, 10]);
+    await placeBid(userIds[2], "500.01");
+    expect(await history()).toEqual([700, 10, 500.01]);
+  });
+
+  it("stores a lower non-winning bid at the starting price while keeping the earlier personal best and donation total", async () => {
     await db.query(`insert into public.bids (auction_id, participant_id, amount, created_at)
       values ($1, $2, 700, clock_timestamp() - interval '2 seconds'),
              ($1, $3, 600, clock_timestamp() - interval '1 second')`, [auctionId, participantIds[0], participantIds[1]]);
-    await placeBid(userIds[0], "1");
-    await placeBid(userIds[2], "0.01");
-    expect(await history()).toEqual([700, 600, 1, 0.01]);
+    await placeBid(userIds[0], "550");
+    await placeBid(userIds[2], "500");
+    expect(await history()).toEqual([700, 600, 550, 500]);
     const rows = (await db.query<{ amount: string; is_winner: boolean }>(
       "select * from public.get_auction_leaderboard($1)", [auctionId])).rows;
-    expect(rows.map(row => Number(row.amount))).toEqual([700, 600, 0.01]);
+    expect(rows.map(row => Number(row.amount))).toEqual([700, 600, 500]);
     expect(rows[2].is_winner).toBe(false);
     const total = (await db.query<{ total_bid_amount: string }>("select * from public.get_auction_donation_totals()")).rows[0];
     expect(Number(total.total_bid_amount)).toBe(1300);
     await db.query("select public.end_auction($1)", [auctionId]);
     const final = (await db.query<{ amount: string; is_final: boolean }>(
       "select * from public.get_auction_leaderboard($1)", [auctionId])).rows;
-    expect(final.filter(row => row.is_final).map(row => Number(row.amount))).toEqual([700, 600, 0.01]);
+    expect(final.filter(row => row.is_final).map(row => Number(row.amount))).toEqual([700, 600, 500]);
     const winners = (await db.query<{ winning_amount: string }>("select winning_amount from public.auction_winners order by winner_rank")).rows;
     expect(winners.map(row => Number(row.winning_amount))).toEqual([700, 600]);
   });
@@ -91,31 +116,31 @@ describe("bid acceptance in PostgreSQL", () => {
   );
 
   it("requires a registered, authenticated participant", async () => {
-    await expect(placeBid(null, "10")).rejects.toThrow("session has expired");
+    await expect(placeBid(null, "500")).rejects.toThrow("session has expired");
   });
 
   it("rejects an authenticated user who has not joined this event", async () => {
-    await expect(placeBid("10000000-0000-4000-8000-999999999999", "10")).rejects.toThrow("Join the auction");
+    await expect(placeBid("10000000-0000-4000-8000-999999999999", "500")).rejects.toThrow("Join the auction");
   });
 
   it("requires completed contact registration", async () => {
     await db.query("delete from private.participant_contacts where participant_id = $1", [participantIds[0]]);
-    await expect(placeBid(userIds[0], "10")).rejects.toThrow("Complete registration");
+    await expect(placeBid(userIds[0], "500")).rejects.toThrow("Complete registration");
   });
 
   it("retains the database protection against rapid repeated submissions", async () => {
-    await placeBid(userIds[0], "10");
-    await expect(placeBid(userIds[0], "1")).rejects.toThrow("Please wait a moment");
+    await placeBid(userIds[0], "500");
+    await expect(placeBid(userIds[0], "500")).rejects.toThrow("Please wait a moment");
   });
 
   it("blocks bids during the start countdown", async () => {
     await db.query("update public.auctions set starts_at = now() + interval '15 seconds' where id = $1", [auctionId]);
-    await expect(placeBid(userIds[0], "0.01")).rejects.toThrow("not accepting bids");
+    await expect(placeBid(userIds[0], "500")).rejects.toThrow("not accepting bids");
   });
 
   it("blocks bids after the event ends", async () => {
     await db.query("select public.end_auction($1)", [auctionId]);
-    await expect(placeBid(userIds[0], "0.01")).rejects.toThrow("not accepting bids");
+    await expect(placeBid(userIds[0], "500")).rejects.toThrow("not accepting bids");
   });
 
   it("exposes bid submission only to authenticated users and denies direct writes", async () => {

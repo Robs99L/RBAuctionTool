@@ -181,8 +181,8 @@ try {
   let acceptedBids = 0;
   for (let round = 1; round <= bidRounds; round += 1) {
     // Everyone may submit identical amounts; alternating rounds also exercise
-    // bids below both the opening price and the already accepted highest bid.
-    const amount = round % 2 === 0 ? 0.01 : 1;
+    // lower follow-up bids that still meet the starting price.
+    const amount = Number(createdAuction.starting_price) + (round % 2 === 0 ? 0 : 1);
 
     const results = await Promise.all(participants.map(async ({ client }) => {
       const startedAt = performance.now();

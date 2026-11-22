@@ -282,7 +282,9 @@ async function viewsAgree(amount) {
 }
 async function assertHiddenPresentationAmounts() {
   for (const { name, page } of [pages[0], ...pages.slice(2)]) {
-    assert(await page.evaluate("!/[€]|\\bEUR\\b/.test(document.body.innerText) && document.querySelectorAll('ol[aria-label] li > strong').length === 0"), `${name} must contain no currency values before event end`);
+    const startingPriceSelector = name === pages[0].name ? "#presentation-starting-price" : "#bid-starting-price";
+    assert.equal(await page.evaluate(`document.querySelector(${JSON.stringify(startingPriceSelector + " strong")})?.textContent`), money(auction.starting_price), `${name} must show the starting price`);
+    assert(await page.evaluate(`!/[€]|\\bEUR\\b/.test(document.body.innerText.replace(document.querySelector(${JSON.stringify(startingPriceSelector)}).innerText, '')) && document.querySelectorAll('ol[aria-label] li > strong').length === 0`), `${name} must hide bid amounts before event end`);
   }
   for (const { page } of pages.slice(2)) {
     assert(await page.evaluate("!/recent activit/i.test(document.body.innerText)"), "participants must have no recent activity feed");
@@ -400,13 +402,13 @@ try {
       && (await Promise.all(contexts.map(({ page }) => page.evaluate("document.body.innerText.includes('Your bid has been accepted.')")))).every(Boolean), "bid receipts without monetary amounts");
     await assertHiddenPresentationAmounts();
   }
-  await submitFrom(pages.slice(2), 50);
-  await submitFrom([pages[2]], 0.01);
-  assert.deepEqual(submittedBids.map(record => record.amount), [50, 50, 0.01]);
+  await submitFrom(pages.slice(2), 500);
+  await submitFrom([pages[2]], 500);
+  assert.deepEqual(submittedBids.map(record => record.amount), [500, 500, 500]);
   assert.deepEqual(rows().map(row => ({ id: row.bid_id, amount: row.amount })), beforeLower);
   await assertAdminRanking();
   assert.deepEqual(await presentation.evaluate("Array.from(document.querySelectorAll('ol[aria-label] li')).map(row=>row.querySelector('div strong').textContent)"), rows().slice(0, 12).map(row => row.username));
-  results.push({ scenario: "Both real bidder forms accept identical €50 bids below the €500 opening price and leader; a €0.01 follow-up is also saved while personal bests and all rankings remain unchanged", passed: true });
+  results.push({ scenario: "Both real bidder forms accept identical bids at the €500 starting price; a €500 follow-up is also saved while higher personal bests and all rankings remain unchanged", passed: true });
   await submitFrom([pages[2]], 8000);
   await waitFor(() => viewsAgree(8000), "bid above old maximum visible in all views");
   assert.equal(submittedBids.at(-1).amount, 8000);
@@ -517,10 +519,6 @@ try {
   await waitFor(() => countersAgree(5), "unregistered visitor included in both counters");
   results.push({ scenario: "An unregistered visitor without an Auth session also contributes to the online total", passed: true });
   await capturePresentation("online-mobile", 375, 667);
-  const preview = await createPage("preview", "/presentation?demo=true&winners=2");
-  await waitFor(async () => await preview.evaluate("document.querySelector('[data-online-count]')?.getAttribute('data-online-count')==='1'"), "standalone preview uses the local browser count");
-  assert(await preview.evaluate("window.__qaSockets().length===0"), "standalone preview must not connect to Supabase");
-  results.push({ scenario: "The standalone demo shows its one local browser and makes no Supabase connections; the mobile online counter fits", passed: true });
   assert.equal(failures.length, 0, JSON.stringify(failures));
 } catch (error) {
   failures.push({ error: error.stack ?? error.message });

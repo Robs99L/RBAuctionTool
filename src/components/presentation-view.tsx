@@ -103,9 +103,10 @@ export function PresentationView({
               {auction.description && <div className={styles.description}><p>{auction.description}</p></div>}
               <div className={styles.eventMeta}>
                 <div className={styles.eventRules}>
-                  <div><span>Winning places</span><strong>{auction.winner_count}</strong></div>
+                  <div id="presentation-starting-price"><span>Starting<br />price</span><strong>{formatMoney(auction.starting_price, auction.currency)}</strong></div>
+                  <div><span>Winning<br />places</span><strong>{auction.winner_count}</strong></div>
                 </div>
-                <AuctionTimer key={`${auction.id}:${auction.starts_at}`} startsAt={auction.starts_at} durationSeconds={auction.timer_duration_seconds} status={auction.status} className={styles.timer} compact />
+                <AuctionTimer key={`${auction.id}:${auction.starts_at}`} startsAt={auction.starts_at} durationSeconds={auction.timer_duration_seconds} status={auction.status} className={styles.timer} compact twoLineLabel />
               </div>
             </div>
           </section>
@@ -236,7 +237,7 @@ function PresentationLeaderboard({ auction, entries }: { auction: Auction; entri
       )}
       <div className={styles.rankFooter}>
         <span>Top {Math.max(10, auction.winner_count)}</span>
-        <span>{ended ? `${winnerCount} ${winnerCount === 1 ? "winner" : "winners"}` : "Amounts revealed when bidding closes"}</span>
+        <span>{ended ? `${winnerCount} ${winnerCount === 1 ? "winner" : "winners"}` : "Bid amounts revealed when bidding closes"}</span>
       </div>
     </div>
   );

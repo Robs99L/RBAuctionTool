@@ -104,15 +104,15 @@
 .imageArea .image { width: min(100%, calc(100cqh * 16 / 9)); height: auto; }
 .eventMeta { display: flex; align-items: stretch; gap: 12px; margin-top: auto; padding-top: 12px; }
 .eventMeta > * { min-width: 0; flex: 1; }
-.eventRules { display: flex; }
-.eventRules > div { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e0e4d5; border-radius: 9px; background: #f1f3e8; padding: 12px; }
-.eventRules span { display: block; color: var(--presentation-muted); font-size: clamp(16px, 1.2vw, 22px); }
-.eventRules strong { display: block; overflow-wrap: anywhere; font-size: clamp(20px, 1.3vw, 26px); font-variant-numeric: tabular-nums; }
+.eventRules { display: flex; flex: 2; gap: 12px; }
+.eventRules > div { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e0e4d5; border-radius: 9px; background: #f1f3e8; padding: 12px; }
+.eventRules span { display: block; color: var(--presentation-muted); font-size: clamp(16px, 1.2vw, 22px); line-height: 1.4; white-space: nowrap; }
+.eventRules strong { display: block; flex-shrink: 0; font-size: clamp(20px, 1.3vw, 26px); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .timer { border-color: #d5e2d3; border-radius: 9px; background: #eaf2e7; padding: 8px 12px; }
 .timer > div { flex-direction: row; align-items: center; gap: 8px; }
 .timer[aria-label*="elapsed"] { border-color: #efd3c7; background: #fff0e9; }
 .timer strong { align-self: center; font-size: clamp(28px, 2vw, 40px); }
-.timer p { font-size: clamp(10px, .85vw, 16px); }
+.timer p { font-size: clamp(10px, .85vw, 16px); white-space: nowrap; }
 
 .leaderboardFrame { position: relative; display: flex; min-width: 0; min-height: 0; }
 .leaderboard { display: flex; flex: 1; flex-direction: column; }
@@ -171,6 +171,7 @@
   .eyebrow { font-size: 14px; }
   .eventStatus { padding: 4px 8px; font-size: 12px; }
   .eventMeta { gap: 8px; padding-top: 8px; }
+  .eventRules { gap: 8px; }
   .eventRules > div { padding: 8px 10px; }
   .eventRules span { font-size: 14px; }
   .eventRules strong { font-size: 20px; }
@@ -206,12 +207,12 @@
   .title { margin-top: 6px; font-size: 20px; }
   .description { margin-top: 6px; }
   .eventMeta { gap: 6px; padding-top: 6px; }
-  .eventRules > div { flex-wrap: nowrap; gap: 4px; padding: 4px 6px; }
+  .eventRules { gap: 6px; }
+  .eventRules > div { gap: 4px; padding: 4px 6px; }
   .eventRules span { font-size: 10px; }
   .eventRules strong { font-size: 15px; }
   .timer { padding: 4px 8px; }
-  .timer > div { flex-direction: row; align-items: center; gap: 8px; }
-  .timer strong { align-self: center; font-size: 24px; }
+  .timer strong { font-size: 24px; }
   .timer p { font-size: 9px; letter-spacing: .04em; line-height: 1.2; }
   .santaHat { --hat-width: 48px; right: -4px; }
   .leaderboardHeader { padding: 8px 12px; }

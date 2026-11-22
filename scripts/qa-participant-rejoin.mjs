@@ -155,7 +155,8 @@ async function checkBrowser(expired) {
     await waitFor("document.querySelector('#bid-amount')?.disabled === false");
     assert.equal(anonymousSignins, 1); assert.equal(joinRequests, 2); assert.deepEqual(bids[0], savedBid);
     await waitFor("document.body.innerText.includes('You are ranked #1.') && document.querySelector('ol[aria-label] li')?.innerText.includes('Mia Keller')");
-    assert(await page.evaluate("!/€|\\bEUR\\b/.test(document.body.innerText) && !/recent activit/i.test(document.body.innerText)"));
+    assert.equal(await page.evaluate("document.querySelector('#bid-starting-price strong')?.textContent"), new Intl.NumberFormat("en-US", { style: "currency", currency: auction.currency, minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(auction.starting_price));
+    assert(await page.evaluate("!/€|\\bEUR\\b/.test(document.body.innerText.replace(document.querySelector('#bid-starting-price').innerText, '')) && !/recent activit/i.test(document.body.innerText)"));
     await fill("#bid-amount", "150"); await page.evaluate("document.querySelector('#bid-amount').form.requestSubmit()");
     await waitFor("document.body.innerText.includes('Your bid has been accepted.')");
     assert.equal(bids.length, 2); assert.equal(bids[1].participant_id, person.id);
@@ -174,7 +175,7 @@ async function checkBrowser(expired) {
     const screenshot = await page.call("Page.captureScreenshot", { format: "png" });
     await writeFile(new URL(`../qa/participant-rejoin-${expired ? 'invalid-session' : 'lost-storage'}.png`, import.meta.url), Buffer.from(screenshot.data, "base64"));
     results.push({ scenario: expired ? "Invalid stored session is cleared and rejoined" : "Lost Auth storage is rejoined", passed: true,
-      checks: ["wrong email rejected", "same original participant and bid", "new bids use original participant", "second session loss returns registration and can rejoin", "Auth sign-out returns registration and creates a new session on rejoin", "amounts and recent activities remain hidden", "no horizontal mobile overflow", "no email requests"] });
+      checks: ["wrong email rejected", "same original participant and bid", "new bids use original participant", "second session loss returns registration and can rejoin", "Auth sign-out returns registration and creates a new session on rejoin", "starting price visible; bid amounts and recent activities remain hidden", "no horizontal mobile overflow", "no email requests"] });
     auction.status = "ended"; auction.ends_at = new Date().toISOString();
     await page.call("Page.navigate", { url: origin });
     await waitFor("Array.from(document.querySelectorAll('button')).some(button => button.textContent.includes('Rejoin to see your result'))");

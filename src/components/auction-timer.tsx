@@ -17,6 +17,7 @@ export function AuctionTimer({
   eventName,
   nextEventName,
   compact = false,
+  twoLineLabel = false,
   className = "",
 }: {
   startsAt: string | null;
@@ -25,6 +26,7 @@ export function AuctionTimer({
   eventName?: string;
   nextEventName?: string | null;
   compact?: boolean;
+  twoLineLabel?: boolean;
   className?: string;
 }) {
   const clockReady = useAuctionClock();
@@ -50,6 +52,7 @@ export function AuctionTimer({
   const starting = startCountdownSeconds > 0;
   const displayedSeconds = starting ? startCountdownSeconds : remainingSeconds;
   const elapsed = remainingSeconds === 0;
+  const labelLines = starting ? ["Bidding", "starts in"] : elapsed ? ["Timer", "elapsed"] : ["Time", "remaining"];
 
   return (
     <div
@@ -65,7 +68,7 @@ export function AuctionTimer({
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
         <div className="min-w-0">
           <p className={`font-bold uppercase tracking-[.15em] ${elapsed ? "text-coral" : "text-forest"} ${compact ? "text-[10px]" : "text-xs"}`}>
-            {starting ? "Bidding starts in" : elapsed ? "Timer elapsed" : "Time remaining"}
+            {twoLineLabel ? <>{labelLines[0]}<br />{labelLines[1]}</> : labelLines.join(" ")}
           </p>
           {eventName && (
             <p className={`break-words font-semibold text-ink ${compact ? "mt-1 text-sm" : "mt-2 text-base"}`}>

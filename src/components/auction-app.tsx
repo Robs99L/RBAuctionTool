@@ -870,6 +870,9 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
     if (parseBidAmount(String(amount)) === null) {
       throw new Error("Enter a valid positive amount with no more than two decimal places.");
     }
+    if (amount < demoAuction.starting_price) {
+      throw new Error("Your bid must be at least the starting price.");
+    }
 
     const nextBid: Bid = {
       id: crypto.randomUUID(),
@@ -1144,6 +1147,10 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
       setFeedback({ kind: "error", text: "Enter a valid positive amount with no more than two decimal places." });
       return;
     }
+    if (parsed < auction.starting_price) {
+      setFeedback({ kind: "error", text: "Your bid must be at least the starting price." });
+      return;
+    }
 
     setSubmitting(true);
     setFeedback(null);
@@ -1213,6 +1220,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 </div>
                 <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-ink/10 pt-5 text-sm sm:flex sm:flex-wrap sm:gap-8">
                   <div><span className="block text-ink/45">Winner spots</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
+                  <div id="bid-starting-price"><span className="block text-ink/45">Starting price</span><strong className="mt-1 block tabular-nums">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                 </div>
               </div>
             </div>
@@ -1302,10 +1310,10 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 inputMode="decimal"
                 placeholder="Enter your amount"
                 disabled={!biddingOpen || submitting}
-                aria-describedby="bid-help"
+                aria-describedby="bid-starting-price bid-help"
               />
               <p id="bid-help" className="mt-2 text-xs leading-5 text-ink/45">
-                Any positive amount with up to two decimal places is accepted.
+                Your bid must be at least the starting price. Use up to two decimal places.
                 Every accepted bid is saved. Your highest bid counts for the leaderboard.
               </p>
               <button className="btn-primary mt-5 w-full" disabled={!biddingOpen || submitting}>
