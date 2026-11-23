@@ -949,11 +949,11 @@ function Header({
   participantCount: number;
 }) {
   return (
-    <header className="border-b border-ink/10 bg-white px-4 py-4 sm:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
+    <header className={`${styles.header} border-b border-ink/10 bg-white px-4 py-3 sm:px-8 sm:py-4`}>
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 sm:gap-3">
         <div className="brand-lockup">
           <RbLogo />
-          <span className="max-w-44 text-sm leading-tight sm:max-w-none sm:text-base">
+          <span className="max-w-20 text-xs leading-tight sm:max-w-none sm:text-base">
             Christmas Auction
           </span>
         </div>
@@ -1007,29 +1007,29 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
   return (
     <div className={`${styles.join} grid grid-cols-[minmax(0,1fr)] items-center lg:grid-cols-[1.08fr_.92fr]`}>
       <Snowfall variant="participant" />
-      <section className="h-36 min-w-0 max-w-full overflow-hidden bg-ink sm:h-56 lg:h-auto">
+      <section className="min-w-0 max-w-full overflow-hidden bg-ink">
         <Image
           src={christmasAuctionImage}
           alt="Christmas Auction"
-          sizes="(max-width: 1024px) 100vw, 54vw"
-          className="block h-full w-full object-cover opacity-90 lg:h-auto lg:object-contain"
+          sizes="(max-width: 639px) 224px, (max-width: 1023px) 320px, 54vw"
+          className={styles.joinImage}
           placeholder="blur"
           preload
         />
       </section>
 
-      <section className="flex min-w-0 items-center px-5 py-8 sm:px-12 sm:py-10 lg:px-16">
-        <div className="w-full max-w-lg">
-          <h2 className="break-words text-3xl font-semibold sm:text-4xl">Welcome to the OPS/IND Christmas Auction</h2>
-          <p className="mt-3 text-lg font-semibold text-forest">
+      <section className="flex min-w-0 items-center px-4 py-5 sm:px-12 sm:py-10 lg:px-16">
+        <div className="flex w-full max-w-lg flex-col">
+          <h2 className="wrap-anywhere text-2xl font-semibold leading-tight sm:text-4xl">Welcome to the OPS/IND Christmas Auction</h2>
+          <p className="mt-2 text-lg font-semibold text-forest sm:mt-3">
             {auction.status === "ended" ? "Rejoin to see your result." : "Join the bidding."}
           </p>
-          <p className="mt-5 max-w-md text-base leading-7 text-ink/60">
+          <p className="mt-3 max-w-md text-sm leading-6 text-ink/60 sm:mt-5 sm:text-base sm:leading-7">
             {auction.status === "ended"
               ? "This auction has ended. Existing participants can rejoin with their original name and email."
               : "Register with your name and email. You stay in the auction automatically when the next bidding round starts."}
           </p>
-          <p className="mt-3 max-w-md text-sm leading-6 text-ink/60">
+          <p className="order-2 mt-4 max-w-md text-sm leading-6 text-ink/60 sm:order-none sm:mt-3">
             Lost your session? Enter the same name and email to rejoin. Your existing bids and rank are kept.
           </p>
           <AuctionTimer
@@ -1039,9 +1039,9 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
             eventName={auction.title}
             nextEventName={nextEventName}
             compact
-            className="mt-6"
+            className="order-3 mt-5 sm:order-none sm:mt-6"
           />
-          <form className="mt-9 space-y-4" onSubmit={join}>
+          <form className="order-1 mt-5 space-y-4 sm:order-none sm:mt-9" onSubmit={join}>
             <div>
               <label className="field-label" htmlFor="username">Full name</label>
               <input
@@ -1050,10 +1050,11 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
                 className="field min-h-12"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                placeholder="e.g. Mia Keller"
+                placeholder="e.g. Max Mustermann"
                 maxLength={120}
                 autoComplete="name"
-                autoFocus
+                autoCapitalize="words"
+                enterKeyHint="next"
                 required
               />
             </div>
@@ -1063,21 +1064,26 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
                 id="email"
                 name="email"
                 type="email"
-                className="field min-h-12"
+                className="field min-h-12 placeholder:text-[13px] sm:placeholder:text-base"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="mia@example.com"
+                placeholder="max.mustermann@rolandberger.com"
                 maxLength={254}
                 autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="done"
                 required
               />
             </div>
-            <button className="btn-primary w-full" disabled={submitting}>
+            <button className="btn-primary min-h-12 w-full" disabled={submitting}>
               {submitting ? "Joining…" : auction.status === "ended" ? "Rejoin auction" : "Join or rejoin auction"}
             </button>
             {message && <div className="notice notice-error mt-3" role="alert">{message}</div>}
           </form>
-          <p className="mt-6 text-xs leading-5 text-ink/45">
+          <p className="order-4 mt-5 text-xs leading-5 text-ink/45 sm:order-none sm:mt-6">
             Your name is shown with bids. Your email stays private and is available only to auction administrators.
           </p>
         </div>
@@ -1173,7 +1179,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-8 sm:py-10">
+    <div className="mx-auto max-w-7xl px-3 py-4 sm:px-8 sm:py-10">
       {showResultModal && participant && (
         <AuctionResultModal
           auction={auction}
@@ -1203,22 +1209,22 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_35%,#557867,#18201d_68%)]" />
                 )}
               </div>
-              <div className="flex flex-col justify-between p-5 sm:p-8">
+              <div className="flex flex-col justify-between p-4 sm:p-8">
                 <div>
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-xs font-bold uppercase tracking-[.18em] text-forest">Current lot</p>
                     <span className="status-pill"><span className={`status-dot ${status}`} />{starting ? "starting" : status}</span>
                   </div>
-                  <h1 className="mt-4 break-words text-3xl font-semibold sm:text-4xl">{auction.title}</h1>
-                  <p className="mt-4 leading-7 text-ink/60">{auction.description}</p>
+                  <h1 className="mt-3 wrap-anywhere text-2xl font-semibold leading-tight sm:mt-4 sm:text-4xl">{auction.title}</h1>
+                  <p className="mt-3 whitespace-pre-line wrap-anywhere text-sm leading-6 text-ink/60 sm:mt-4 sm:text-base sm:leading-7">{auction.description}</p>
                   <AuctionTimer
                     startsAt={auction.starts_at}
                     durationSeconds={auction.timer_duration_seconds}
                     status={status}
-                    className="mt-6"
+                    className={`${styles.roomTimer} mt-4 sm:mt-6`}
                   />
                 </div>
-                <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-ink/10 pt-5 text-sm sm:flex sm:flex-wrap sm:gap-8">
+                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-ink/10 pt-3 text-sm sm:mt-8 sm:flex sm:flex-wrap sm:gap-8 sm:pt-5">
                   <div><span className="block text-ink/45">Winner spots</span><strong className="mt-1 block">{auction.winner_count}</strong></div>
                   <div id="bid-starting-price"><span className="block text-ink/45">Starting price</span><strong className="mt-1 block tabular-nums">{formatMoney(auction.starting_price, auction.currency)}</strong></div>
                 </div>
@@ -1226,7 +1232,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
             </div>
           </section>
 
-          <section className="panel order-3 p-5 sm:p-7 lg:order-none">
+          <section className="panel order-3 p-4 sm:p-7 lg:order-none">
             <div className="mb-5 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.16em] text-ink/45">
@@ -1248,13 +1254,13 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 {leaderboard.map((entry) => (
                   <li
                     key={entry.participant_id}
-                    className={`grid ${showAmounts ? "grid-cols-[2rem_minmax(0,1fr)_auto] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto]" : "grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_minmax(0,1fr)]"} items-center gap-2 py-3 sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
+                    className={`grid ${showAmounts ? "grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_minmax(0,1fr)_auto]" : "grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_minmax(0,1fr)]"} items-center gap-2 py-3 sm:gap-3 ${entry.participant_id === participant?.id ? "bg-lime/20" : ""}`}
                   >
                     <span className={`grid h-8 w-8 place-items-center rounded-full text-sm font-bold sm:h-9 sm:w-9 ${entry.is_winner ? "bg-lime" : "bg-ink/5"}`}>
                       {entry.bidder_rank}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold">{entry.username}</p>
+                      <p className="wrap-anywhere font-semibold">{entry.username}</p>
                       {entry.is_winner && (
                         <span className="text-xs font-semibold text-forest">
                           {status === "ended" ? "Winner" : "Winning place"}
@@ -1262,7 +1268,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                       )}
                     </div>
                     {showAmounts && (
-                      <strong className="shrink-0 whitespace-nowrap text-right text-sm tabular-nums sm:text-base">{formatMoney(entry.amount, auction.currency)}</strong>
+                      <strong className="col-start-2 shrink-0 whitespace-nowrap text-left text-sm tabular-nums sm:col-start-auto sm:text-right sm:text-base">{formatMoney(entry.amount, auction.currency)}</strong>
                     )}
                   </li>
                 ))}
@@ -1275,18 +1281,18 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
           </section>
         </div>
 
-        <aside className="order-2 lg:order-none lg:sticky lg:top-6 lg:self-start">
+        <aside className="order-2 min-w-0 lg:order-none lg:sticky lg:top-6 lg:self-start">
           <section className="overflow-hidden rounded-3xl bg-forest text-white shadow-card">
-            <div className="p-6 sm:p-8">
+            <div className="p-4 sm:p-8">
               <p className="text-xs font-bold uppercase tracking-[.18em] text-white/55">{status === "ended" ? "Final leader" : "Current leader"}</p>
               {showAmounts && highest && (
-                <p className="mt-3 break-words text-4xl font-semibold tabular-nums sm:text-6xl">
+                <p className="mt-3 wrap-anywhere text-4xl font-semibold tabular-nums sm:text-6xl">
                   {formatMoney(highest.amount, auction.currency)}
                 </p>
               )}
-              <div className="mt-5 flex min-h-10 items-center gap-3 border-t border-white/15 pt-5">
+              <div className="mt-3 flex min-h-10 items-center gap-3 border-t border-white/15 pt-3 sm:mt-5 sm:pt-5">
                 {highest ? (
-                  <><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-lime text-xs font-bold text-ink">{highest.username.slice(0, 2).toUpperCase()}</span><div className="min-w-0"><span className="block text-xs text-white/50">Leading participant</span><strong className="block truncate">{highest.username}</strong></div></>
+                  <><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-lime text-xs font-bold text-ink">{highest.username.slice(0, 2).toUpperCase()}</span><div className="min-w-0"><span className="block text-xs text-white/50">Leading participant</span><strong className="block wrap-anywhere">{highest.username}</strong></div></>
                 ) : (
                   <span className="text-sm text-white/58">Waiting for the first bid</span>
                 )}
@@ -1294,11 +1300,11 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
             </div>
 
             {participant ? (
-            <form onSubmit={submitBid} className="bg-white p-6 text-ink sm:p-8">
+            <form onSubmit={submitBid} className="bg-white p-4 text-ink sm:p-8">
               <div className="mb-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div>
                   <span className="block text-xs font-bold uppercase tracking-[.13em] text-ink/45">Bidding as</span>
-                  <strong className="mt-1 block">{participant.username}</strong>
+                  <strong className="mt-1 block wrap-anywhere">{participant.username}</strong>
                 </div>
               </div>
               <label className="field-label" htmlFor="bid-amount">Your bid</label>
@@ -1308,6 +1314,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 inputMode="decimal"
+                enterKeyHint="done"
                 placeholder="Enter your amount"
                 disabled={!biddingOpen || submitting}
                 aria-describedby="bid-starting-price bid-help"
@@ -1316,7 +1323,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                 Your bid must be at least the starting price. Use up to two decimal places.
                 Every accepted bid is saved. Your highest bid counts for the leaderboard.
               </p>
-              <button className="btn-primary mt-5 w-full" disabled={!biddingOpen || submitting}>
+              <button className="btn-primary mt-5 min-h-12 w-full" disabled={!biddingOpen || submitting}>
                 {submitting
                   ? "Checking bid…"
                   : connection !== "live"
@@ -1329,7 +1336,7 @@ function AuctionRoom({ auction, participant, leaderboard, connection, onPlaceBid
                         ? "Auction ended"
                         : "Auction not started"}
               </button>
-              <div className="mt-3 min-h-12" aria-live="polite">
+              <div className="mt-3 min-h-6" aria-live="polite">
                 {feedback && <div className={`notice ${feedback.kind === "error" ? "notice-error" : "notice-success"}`}>{feedback.text}</div>}
               </div>
             </form>
@@ -1384,7 +1391,7 @@ function AuctionResultModal({
       }}
     >
       <section
-        className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
         role="dialog"
         aria-modal="true"
         aria-labelledby="auction-result-title"
@@ -1409,7 +1416,7 @@ function AuctionResultModal({
           </button>
         </div>
 
-        <p id="auction-result-description" className="mt-5 text-lg font-semibold">
+        <p id="auction-result-description" className="mt-5 wrap-anywhere text-lg font-semibold">
           {auction.title}
         </p>
         {personalRank ? (
