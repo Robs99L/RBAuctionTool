@@ -1011,7 +1011,7 @@ function JoinExperience({ auction, nextEventName, onJoined, onJoin }: {
         <Image
           src={christmasAuctionImage}
           alt="Christmas Auction"
-          sizes="(max-width: 639px) 224px, (max-width: 1023px) 320px, 54vw"
+          sizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) 320px, 54vw"
           className={styles.joinImage}
           placeholder="blur"
           preload

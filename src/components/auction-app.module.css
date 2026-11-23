@@ -21,7 +21,7 @@
 
 .joinImage {
   display: block;
-  width: min(100%, clamp(180px, 26dvh, 224px));
+  width: 100%;
   height: auto;
   margin-inline: auto;
   object-fit: contain;
