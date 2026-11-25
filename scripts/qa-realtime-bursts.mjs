@@ -3,6 +3,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
+import { createAdminSessionToken } from "../src/lib/admin-session-token.ts";
 
 const origin = process.env.QA_ORIGIN || "http://localhost:3001";
 const debugOrigin = process.env.QA_DEBUG_ORIGIN || "http://localhost:9228";
@@ -14,6 +15,8 @@ const env = await readFile(new URL("../.env.local", import.meta.url), "utf8");
 const supabaseUrl = env.match(/^NEXT_PUBLIC_SUPABASE_URL=["']?([^\s"']+)/m)?.[1];
 assert(supabaseUrl, "Supabase public URL required to intercept its requests");
 const storageKey = `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`;
+const adminSecret = process.env.QA_ADMIN_SECRET ?? env.match(/^ADMIN_SECRET=["']?([^\r\n"']+)/m)?.[1];
+assert(adminSecret && adminSecret.length >= 16, "A local ADMIN_SECRET matching the test server is required for protected presentation access");
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class CDP {
@@ -205,6 +208,13 @@ async function createPage(name, path, person) {
   const page = await CDP.connect(target.webSocketDebuggerUrl);
   pages.push({ name, page, browserContextId });
   await page.call("Runtime.enable"); await page.call("Page.enable");
+  if (name === "admin" || name === "presentation") {
+    const cookie = await page.call("Network.setCookie", {
+      name: "auction_admin", value: createAdminSessionToken(adminSecret),
+      url: origin, httpOnly: true, sameSite: "Strict",
+    });
+    assert(cookie.success, "Local admin session cookie must be accepted");
+  }
   await page.call("Emulation.setDeviceMetricsOverride", { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
   await page.call("Emulation.setLocaleOverride", { locale: "en-US" });
   page.on("Runtime.exceptionThrown", event => failures.push({ view: name, error: event.exceptionDetails.text, description: event.exceptionDetails.exception?.description }));

@@ -733,11 +733,12 @@ export function AuctionApp({ presentation = false }: { presentation?: boolean })
   if (restoredAuctionId !== auctionId || (participant && participant.auction_id !== auctionId)) {
     return <LoadingScreen />;
   }
+  const showAuctionRoom = Boolean(participant) || (!rejoinRequested && effectiveStatus(auction) === "ended");
 
   return (
     <main className={`${styles.screen} min-h-screen flow-root`}>
-      <Header connection={viewConnection} participantCount={participantCount} />
-      {participant || (!rejoinRequested && effectiveStatus(auction) === "ended") ? (
+      <Header connection={viewConnection} participantCount={participantCount} showConnection={showAuctionRoom} />
+      {showAuctionRoom ? (
         <AuctionRoom
           key={auction.id}
           auction={auction}
@@ -903,6 +904,7 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
   }
   if (!demoState) return <LoadingScreen />;
   if (!demoAuction) return <NoAuction />;
+  const showAuctionRoom = Boolean(participant) || (!rejoinRequested && effectiveStatus(demoAuction) === "ended");
 
   return (
     <main className={`${styles.screen} min-h-screen flow-root`}>
@@ -914,8 +916,8 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
           </button>
         </div>
       </div>
-      <Header connection="live" participantCount={demoParticipants.length} />
-      {participant || (!rejoinRequested && effectiveStatus(demoAuction) === "ended") ? (
+      <Header connection="live" participantCount={demoParticipants.length} showConnection={showAuctionRoom} />
+      {showAuctionRoom ? (
         <AuctionRoom
           key={demoAuction.id}
           auction={demoAuction}
@@ -944,9 +946,11 @@ function DemoAuctionApp({ presentation = false }: { presentation?: boolean }) {
 function Header({
   connection,
   participantCount,
+  showConnection = true,
 }: {
   connection: ConnectionState;
   participantCount: number;
+  showConnection?: boolean;
 }) {
   return (
     <header className={`${styles.header} border-b border-ink/10 bg-white px-4 py-3 sm:px-8 sm:py-4`}>
@@ -961,10 +965,12 @@ function Header({
           <span className="hidden text-sm text-ink/55 sm:inline">
             {participantCount} {participantCount === 1 ? "participant" : "participants"}
           </span>
-          <span className="status-pill" title={connection === "live" ? "Realtime updates connected" : "Realtime connection status"}>
-            <span className={`status-dot ${connection === "live" ? "active" : ""}`} />
-            {connection === "live" ? "Live" : connection === "connecting" ? "Connecting" : "Reconnecting"}
-          </span>
+          {showConnection && (
+            <span className="status-pill" title={connection === "live" ? "Realtime updates connected" : "Realtime connection status"}>
+              <span className={`status-dot ${connection === "live" ? "active" : ""}`} />
+              {connection === "live" ? "Live" : connection === "connecting" ? "Connecting" : "Reconnecting"}
+            </span>
+          )}
           <Link href="/admin" className="text-link whitespace-nowrap">
             Admin
           </Link>

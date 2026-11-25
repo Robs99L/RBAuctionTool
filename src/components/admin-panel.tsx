@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AuctionTimer } from "@/components/auction-timer";
@@ -1030,6 +1031,16 @@ function AuctionManagerView({
             <h1 className="mt-1 text-2xl font-semibold tracking-[-.03em]">Event queue</h1>
           </div>
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 sm:w-auto sm:justify-end">
+            {!demo && (
+              <Link className="btn-secondary gap-2" href="/presentation" target="_blank" rel="noopener noreferrer" prefetch={false}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="13" rx="2" />
+                  <path d="M12 16v5m-5 0h10" />
+                </svg>
+                Presentation view
+                <span className="sr-only"> (opens in a new tab)</span>
+              </Link>
+            )}
             {!demo && <a className="text-link inline-flex min-h-11 items-center" href="/api/admin/auction-import">Download Excel template</a>}
             {!demo && onImport && (
               <label className={`text-link inline-flex min-h-11 cursor-pointer items-center ${saving ? "pointer-events-none opacity-50" : ""}`}>
